@@ -26,8 +26,8 @@ int filename_index = 0;
 
 const int chipSelect = 4;
 
-// Pins for Sharp 11 pin interface data lines
-const int D31Pin     = PB3;
+// Pins for fx502p interface
+const int D3Pin     = PB3;
 const int OPPin      = PB4;
 
 const int SPPin      = PB12;
@@ -39,6 +39,12 @@ const int CONTPin    = PB15;
 // Debug outputs
 const int statPin   = PC13;
 const int dataPin   = PC14;
+
+
+// FSM output flags
+boolean cis_flag_502_po = false;
+boolean cis_flag_event = false;
+char *cis_event = "None";
 
   
 File myFile;
@@ -91,6 +97,30 @@ struct MENU_ELEMENT
   void *submenu;
   void (*function)(struct MENU_ELEMENT *e);
 };
+
+// Commands
+enum
+  {
+    // Data words
+    IP_502A       = 0x00,
+    IP_PRESENCE   = 0x03,
+    IP_WAIT       = 0x0c,
+    IP_PLAY       = 0x0e,
+    IP_PRTSTR     = 0x10,
+    IP_PRTNUM     = 0x11,
+    IP_SENDDAT    = 0x13,
+    IP_UNKA       = 0x19,
+    IP_TERMINATE  = 0x1f,
+    IP_RDSTAT     = 0x21,
+    IP_SELPRT     = 0x29,
+    IP_SENDCTRL   = 0x33,
+    IP_COUNTER    = 0x34,
+    IP_CLOSE      = 0x3C,
+    IP_STOP       = 0x3E,
+
+    // Special stimulii
+    IP_SEND_DONE  = 0x1000,
+  };
 
 
 struct MENU_ELEMENT *current_menu;
@@ -541,7 +571,7 @@ void run_monitor()
   
   if( Serial.available() )
     {
-      Serial.println("Monitor process started");
+      //      Serial.println("Monitor process started");
       c = Serial.read();
 
       switch(c)
@@ -551,7 +581,6 @@ void run_monitor()
 	  // We have a command, process it
 	  for(i=0; i<NUM_CMDS; i++)
 	    {
-	      Serial.print("+");
 	      test = cmd.substring(0, (cmdlist[i].cmdname).length());
 	      if( cmdlist[i].cmdname == "-" )
 		{
@@ -571,7 +600,7 @@ void run_monitor()
 	  cmd += c;
 	  break;
 	}
-      Serial.println("Monitor process completed");
+      //Serial.println("Monitor process completed");
     }
 }
 
@@ -1170,7 +1199,7 @@ HardwareSerial Serial2(PB11, PB10);
 void setup() {
 
   Wire.begin();
-
+  pinMode(SPPin, OUTPUT_OPEN_DRAIN);
   pinMode(SPPin, INPUT);
   
   pinMode(PA0, INPUT);
@@ -1297,8 +1326,9 @@ void setup() {
   last_menu = &(home_menu[0]);
   the_home_menu = last_menu;
 
+#if 0
   to_home_menu(NULL);
-
+#endif
   init_buttons();
 
   // We want an interrupt on rising edge of clock
@@ -1317,7 +1347,7 @@ void loop() {
 
   loopcnt++;
   
-  if( (loopcnt % 5000000) == 0 )
+  if( (loopcnt % 50000000) == 0 )
     {
       Serial.println("Loop");
     }
@@ -1325,6 +1355,24 @@ void loop() {
   update_buttons();
   run_monitor();
 
+  if( cis_flag_event )
+    {
+      cis_flag_event = false;
+      display.fillRect(0, 32, 128, 8, BLACK);
+      display.setCursor(0,32);
+      display.print(cis_event);
+      display.display();
+    }
+
+  if( cis_flag_502_po )
+    {
+      cis_flag_502_po = false;
+      display.fillRect(0, 24, 128, 8, BLACK);
+      display.setCursor(0,24);
+      display.print("fx502p PO");
+      display.display();
+    }
+  
   if( new_word )
     {
       new_word = 0;
@@ -1339,6 +1387,7 @@ void loop() {
       Serial.print(" ");
       Serial.println(packet_count);
 
+#if 0      
       //      display.clearDisplay();
       display.clearDisplay();
       display.setCursor(0,0);
@@ -1350,7 +1399,7 @@ void loop() {
       display.setCursor(0,24);
       display.print(copied_word, HEX);
       display.display();
-
+#endif
     }
     
   if( Serial2.available(),0 )
@@ -1371,25 +1420,88 @@ volatile long hz2400=0, hz1200=0;
 // 
 // This is called when a falling edge is detected on the TXD pin
 //
-int in_byte = 0;
+volatile int in_byte = 0;
+volatile int isr_send_bits = 0;
+volatile int isr_send_data = 0;
+volatile int isr_send_bits_save = 0;
+volatile boolean isr_send_flag = false;
 
-
+// SP has had an edge
 
 void lowISR()
 {
   int pb = GPIOB->IDR;
+  int sp = (pb & (1<<12)) >> 12;
   int d = (pb & 8) >> 3;
   
   digitalWrite(statPin, HIGH);
+  if( isr_send_flag )
+    {
+      // We are required to send bits
+      if( sp )
+	{
+	  // One more bit sent
+	  isr_send_bits--;
+	  isr_send_data >>= 1;
+	  
+	  if( isr_send_bits == 0 )
+	    {
+	      // All done
+	      // Set as input again
+	      pinMode(D3Pin, INPUT);
 
-  // One more rising SP, capture data
-  sp_count++;
+	      // Turn send flag off
+	      isr_send_flag = false;
 
-  captured_word <<= 1;
-  captured_word += (1-d);
-  word_bits++;
+	      // Send stimulus to FSM
+	      captured_word = IP_SEND_DONE;
+	      word_bits = isr_send_bits_save;
+	    }
+	}
+      else
+	{
+	  // falling edge
+	  // Set data up
+	  // Invert it
+	  digitalWrite(D3Pin, (isr_send_data & 1)?LOW:HIGH);
+	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
+	}
+    }
+  else
+    {
+      // We are reading data
+      if( sp )
+	{
+	  // One more rising SP, capture data
+	  sp_count++;
+	  
+	  captured_word <<= 1;
+	  captured_word += (1-d);
+	  word_bits++;
+	}
+      else
+	{
+	  // If we are in send mode then we need to 
+	}
+    }
+  
   digitalWrite(statPin, LOW);
 }
+
+
+// CE ISR states
+
+enum
+  {
+    CIS_IDLE = 0,
+    CIS_502_PO_1,
+    CIS_RX_UNKNOWN_A,
+    CIS_RX_WAIT,
+  };
+
+int ce_isr_state = CIS_IDLE;
+
+#define DATA_BIT_VAL 0
 
 void ceISR()
 {
@@ -1420,7 +1532,102 @@ void ceISR()
 	  blen_buffer[buf_in]  = word_bits;
 	  buf_in++;
 	}
-      
+      // *290 19 (6 bits)
+      // *291 01 (5 bits)
+      // *292 03 (6 bits)
+      // *293 06 (7 bits)
+      // *294 28 (6 bits)
+      // *295 04 (6 bits)
+      // *296 08 (7 bits)
+      // *297 04 (6 bits)
+      // *298 00 (1 bits)
+      // *299 04 (6 bits)
+      // *300 04 (6 bits)
+      // Work out what to do
+      // We don't have a lot of time so use a simple
+      // nested switch FSM
+      // *10315 19 (6 bits)
+      // *10316 03 (6 bits)
+      // *10317 00 (1 bits)
+      // *10318 19 (6 bits)
+      // *10319 03 (6 bits)
+      // *10320 00 (1 bits)
+      // *10321 19 (6 bits)
+      // *10322 03 (6 bits)
+      // *10323 00 (1 bits)
+      // *10324 00 (6 bits)
+      // *10325 3E (6 bits)
+
+      // 502p inv save inv exe sequence
+      //      *6 0C (6 bits)
+      //	*7 00 (1 bits)
+      //	*8 28 (6 bits)
+      //	*9 08 (7 bits)
+      //	*10 08 (7 bits)
+
+      switch(ce_isr_state)
+	{
+	case CIS_IDLE:
+	  switch(captured_word)
+	    {
+	    case IP_502A:
+	      ce_isr_state = CIS_502_PO_1;
+	      break;
+	      
+	    case IP_UNKA:
+	      ce_isr_state = CIS_RX_UNKNOWN_A;
+	      break;
+
+	    case IP_WAIT:
+	      ce_isr_state = CIS_RX_WAIT;
+
+	      // We want to send a 0 bit on the next clock cycle,
+	      // set it up
+	      isr_send_data = DATA_BIT_VAL; // will be inverted
+	      isr_send_bits = 1;
+	      isr_send_bits_save = 1;
+	      isr_send_flag = true;
+	      break;
+	    }
+	  break;
+	  
+	case CIS_RX_WAIT:
+	  switch(captured_word)
+	    {
+	    case IP_SEND_DONE:
+	      // We have sent data, now continue
+	      cis_flag_event = true;
+	      cis_event = "data bit sent";
+	      ce_isr_state = CIS_IDLE;
+	      break;
+	    }
+	  break;
+	  
+	case CIS_RX_UNKNOWN_A:
+	  switch(captured_word)
+	    {
+	    case IP_PRESENCE:
+	      // We need to send a bit after this command
+	      isr_send_bits = 1;
+	      isr_send_data = DATA_BIT_VAL;
+	      isr_send_bits_save = 1;
+	      isr_send_flag = true;
+	      break;
+	    }
+	  break;
+	  
+	case CIS_502_PO_1:
+	  switch(captured_word)
+	    {
+	    case IP_STOP:
+	      cis_flag_event = true;
+	      cis_event = "fx502p po";
+	      ce_isr_state = CIS_IDLE;
+	      break;
+	    }
+	  break;
+	  
+	}
       packet_count++;
     }
   
