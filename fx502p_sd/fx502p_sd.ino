@@ -14,6 +14,7 @@
 #define DIRECT_WRITE          0
 #define DROP_ZERO_BIT_PACKETS 1
 #define TRACE_CLOCKS          0
+#define TRACE_TAGS            0
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -62,20 +63,48 @@ File myFile;
 File dumpfile;
 
 
-
-const int MAX_BYTES = 500;
-const int button1Pin = PA0;
-const int button2Pin = PA1;
-const int button3Pin = PC15;
-
-
 enum
   {
     CIS_IDLE = 0,
     CIS_502_PO_1,
     CIS_RX_UNKNOWN_A,
     CIS_RX_WAIT,
+    CIS_WAIT_2,
+    CIS_WAIT_3,
   };
+
+// Commands
+enum
+  {
+    // Data words
+    IP_502A         = 0x00,
+    IP_PRESENCE     = 0x03,
+    IP_READ_STATUS  = 0x04,
+    IP_WAIT         = 0x0c,
+    IP_PLAY         = 0x0e,
+    IP_PRTSTR       = 0x10,
+    IP_PRTNUM       = 0x11,
+    IP_SENDDAT      = 0x13,
+    IP_UNKA         = 0x19,
+    IP_TERMINATE    = 0x1f,
+    IP_RDSTAT       = 0x21,
+    IP_SELPRT       = 0x29,
+    IP_SENDCTRL     = 0x33,
+    IP_COUNTER      = 0x34,
+    IP_CLOSE        = 0x3C,
+    IP_STOP         = 0x3E,
+
+    // Special stimulii
+    IP_SEND_DONE    = 0x205D,
+  };
+
+
+const int MAX_BYTES = 20;
+const int button1Pin = PA0;
+const int button2Pin = PA1;
+const int button3Pin = PC15;
+
+
 
 volatile int in_byte = 0;
 volatile int isr_send_bits = 0;
@@ -91,8 +120,6 @@ typedef void (*FPTR)();
 typedef void (*CMD_FPTR)(String cmd);
 
 // CE ISR states
-
-#define DATA_BIT_VAL 0
 
 #define NUM_BUTTONS 3
 
@@ -126,30 +153,6 @@ struct MENU_ELEMENT
   void (*function)(struct MENU_ELEMENT *e);
 };
 
-// Commands
-enum
-  {
-    // Data words
-    IP_502A       = 0x00,
-    IP_PRESENCE   = 0x03,
-    IP_WAIT       = 0x0c,
-    IP_PLAY       = 0x0e,
-    IP_PRTSTR     = 0x10,
-    IP_PRTNUM     = 0x11,
-    IP_SENDDAT    = 0x13,
-    IP_UNKA       = 0x19,
-    IP_TERMINATE  = 0x1f,
-    IP_RDSTAT     = 0x21,
-    IP_SELPRT     = 0x29,
-    IP_SENDCTRL   = 0x33,
-    IP_COUNTER    = 0x34,
-    IP_CLOSE      = 0x3C,
-    IP_STOP       = 0x3E,
-
-    // Special stimulii
-    IP_SEND_DONE  = 0x105D,
-  };
-
 
 struct MENU_ELEMENT *current_menu;
 struct MENU_ELEMENT *last_menu;
@@ -167,7 +170,7 @@ char selected_file[MAX_NAME+1];
 char current_file[MAX_NAME+1];
 
 // Where the received data goes
-char stored_bytes[MAX_BYTES] = "Test data example. 01234567890";
+char stored_bytes[MAX_BYTES] = "01234567890";
 
 int stored_bytes_index = 0;
 
@@ -185,12 +188,12 @@ volatile int copied_word_bits = 0;
 
 volatile int new_word = 0;
 
-#define BUF_LEN 300
+#define BUF_LEN 1500
 
 volatile int buf_in = 0;
 volatile int word_buffer[BUF_LEN];
-volatile int count_buffer[BUF_LEN];
-volatile int blen_buffer[BUF_LEN];
+volatile uint8_t count_buffer[BUF_LEN];
+volatile uint8_t blen_buffer[BUF_LEN];
 
 // We build the byte packet in this int, it can be longer than
 // 8 bits as it has the start bit, stop bit and parity if we have it on
@@ -291,7 +294,7 @@ void cmd_display(String cmd)
   
   for(i=0; i<buf_in; i++)
     {
-      if( (word_buffer[i] & 0xff00) == 0 )
+      if( (word_buffer[i] & 0xff00) != 0x1000 )
 	{
       sprintf(line, " %d %02X (%d bits)", count_buffer[i], word_buffer[i], blen_buffer[i]);
       Serial.println(line);
@@ -1479,13 +1482,18 @@ void start_of_packet()
   // Record current OP state so we can detect changes
   isr_current_op = op;
 
+#if TRACE_TAGS
   buffer_point(0x1055, 0, 0);
+#endif
 }
 
+// Processes the end of a packet. uses an FSM to decide what to do next
 
 void end_of_packet()
 {
+#if TRACE_TAGS
   buffer_point(0x10E0, ce_isr_state, captured_word);
+#endif
 
   // End of packet means data input
   pinMode(D3Pin, INPUT);
@@ -1494,7 +1502,9 @@ void end_of_packet()
   // Ignore zero bit packets
   if( word_bits == 0 )
     {
+#if TRACE_TAGS
       buffer_point(0x10E1, 0x1919, 0x1919);
+#endif
       return;
     }
 #endif
@@ -1506,38 +1516,8 @@ void end_of_packet()
 
   buffer_point(captured_word, packet_count, word_bits);
   
-  // *290 19 (6 bits)
-  // *291 01 (5 bits)
-  // *292 03 (6 bits)
-  // *293 06 (7 bits)
-  // *294 28 (6 bits)
-  // *295 04 (6 bits)
-  // *296 08 (7 bits)
-  // *297 04 (6 bits)
-  // *298 00 (1 bits)
-  // *299 04 (6 bits)
-  // *300 04 (6 bits)
-  // Work out what to do
   // We don't have a lot of time so use a simple
   // nested switch FSM
-  // *10315 19 (6 bits)
-  // *10316 03 (6 bits)
-  // *10317 00 (1 bits)
-  // *10318 19 (6 bits)
-  // *10319 03 (6 bits)
-  // *10320 00 (1 bits)
-  // *10321 19 (6 bits)
-  // *10322 03 (6 bits)
-  // *10323 00 (1 bits)
-  // *10324 00 (6 bits)
-  // *10325 3E (6 bits)
-
-  // 502p inv save inv exe sequence
-  //      *6 0C (6 bits)
-  //	*7 00 (1 bits)
-  //	*8 28 (6 bits)
-  //	*9 08 (7 bits)
-  //	*10 08 (7 bits)
 
   switch(ce_isr_state)
     {
@@ -1557,7 +1537,7 @@ void end_of_packet()
 
 	  // We want to send a 0 bit on the next clock cycle,
 	  // set it up
-	  isr_send_data = DATA_BIT_VAL; // will be inverted
+	  isr_send_data = 0;
 	  isr_send_bits = 1;
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
@@ -1570,9 +1550,34 @@ void end_of_packet()
 	{
 	case IP_SEND_DONE:
 	  // We have sent data, now continue
+	  ce_isr_state = CIS_WAIT_2;
+	  break;
+	}
+      break;
+
+    case CIS_WAIT_2:
+      switch(captured_word)
+	{
+	case IP_502B:
+	  // We have the next packet, we need to send a data bit
+	  // for this one too
+	  isr_send_bits = 1;
+	  isr_send_data = 1;
+	  isr_send_bits_save = 1;
+	  isr_send_flag = true;
+	  ce_isr_state = CIS_WAIT_3;
+	  break;
+	}
+      break;
+
+    case CIS_WAIT_3:
+      switch(captured_word)
+	{
+	case IP_SEND_DONE:
 	  cis_flag_event = true;
-	  cis_event = "data bit sent";
-	  ce_isr_state = CIS_IDLE;
+	  cis_event = "inv EXE";
+	  ce_isr_state = CIS_WAIT_2;
+
 	  break;
 	}
       break;
@@ -1583,7 +1588,7 @@ void end_of_packet()
 	case IP_PRESENCE:
 	  // We need to send a bit after this command
 	  isr_send_bits = 1;
-	  isr_send_data = DATA_BIT_VAL;
+	  isr_send_data = 0;
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
 	  break;
@@ -1603,7 +1608,9 @@ void end_of_packet()
 	  
     }
   packet_count++;
+#if TRACE_TAGS
   buffer_point(0x10E1, 0, 0);
+#endif
 }
 
 
@@ -1632,7 +1639,10 @@ void spISR()
   
   if( isr_send_flag )
     {
+      
+#if TRACE_TAGS
       buffer_point(0x105E, isr_send_bits, isr_send_data);
+#endif
       
       // We are required to send bits
       if( sp )
@@ -1646,7 +1656,9 @@ void spISR()
 	      // All done
 	      // Set as input again
 	      pinMode(D3Pin, INPUT);
+#if TRACE_TAGS
 	      buffer_point(0x1051, 0x111, 0x111);
+#endif
 	      
 	      // Turn send flag off
 	      isr_send_flag = false;
@@ -1661,9 +1673,24 @@ void spISR()
 	  // falling edge
 	  // Set data up
 	  // Invert it
-	  digitalWrite(D3Pin, (isr_send_data & 1)?LOW:HIGH);
-	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
+	  if( (isr_send_data & 1) )
+	    {
+	      // Send a 1 (inverted logic) by writing a 0 and
+	      // driving open collector output
+	      digitalWrite(D3Pin, LOW);
+	      pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
+
+	    }
+	  else
+	    {
+	      // Send a 0 (inverted to a 1) by doing nothing
+	      // we ensure data line is input just to make sure
+	      digitalWrite(D3Pin, HIGH);
+	      pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
+	    }
+#if TRACE_TAGS
 	  buffer_point(0x1050, 0x0, 0x0);
+#endif
 	}
     }
   else
@@ -1673,7 +1700,9 @@ void spISR()
       
       if( op != isr_current_op,0 )
 	{
+#if TRACE_TAGS
 	  buffer_point(0x10BB, op, op);
+#endif
 	  
 	  // End of this packet
 	  end_of_packet();
@@ -1719,7 +1748,9 @@ void ceISR()
 
   digitalWrite(statPin, HIGH);
 
+#if TRACE_TAGS
   buffer_point(0x10CE, ce, ce);
+#endif
   
   // One more rising CE
   ce_count++;
@@ -1749,7 +1780,9 @@ void opISR()
  
   digitalWrite(statPin, HIGH);
 
+#if TRACE_TAGS
   buffer_point(0x10CC, op, op);
+#endif
   
   end_of_packet();
   start_of_packet();
