@@ -9,6 +9,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+// Code configuration
+#define DEBUG_SERIAL          0
+#define DIRECT_WRITE          0
+#define DROP_ZERO_BIT_PACKETS 1
+#define TRACE_CLOCKS          0
+
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
@@ -35,6 +41,7 @@ const int CEPin      = PB13;
 const int VCCPin     = PB14;
 const int CONTPin    = PB15;
 
+#define ISOLATE_BIT(N,X) ((X & (1<< N)) >> N)
 
 // Debug outputs
 const int statPin   = PC13;
@@ -46,6 +53,8 @@ boolean cis_flag_502_po = false;
 boolean cis_flag_event = false;
 char *cis_event = "None";
 
+int loopcnt = 0;
+volatile int captured_word = 0;
   
 File myFile;
 
@@ -53,18 +62,37 @@ File myFile;
 File dumpfile;
 
 
-#define DEBUG_SERIAL 0
-#define DIRECT_WRITE 0
 
 const int MAX_BYTES = 500;
 const int button1Pin = PA0;
 const int button2Pin = PA1;
 const int button3Pin = PC15;
 
+
+enum
+  {
+    CIS_IDLE = 0,
+    CIS_502_PO_1,
+    CIS_RX_UNKNOWN_A,
+    CIS_RX_WAIT,
+  };
+
+volatile int in_byte = 0;
+volatile int isr_send_bits = 0;
+volatile int isr_send_data = 0;
+volatile int isr_send_bits_save = 0;
+volatile boolean isr_send_flag = false;
+volatile int isr_current_op = 0;
+volatile int ce_isr_state = CIS_IDLE;
+
 typedef unsigned char BYTE;
 
 typedef void (*FPTR)();
 typedef void (*CMD_FPTR)(String cmd);
+
+// CE ISR states
+
+#define DATA_BIT_VAL 0
 
 #define NUM_BUTTONS 3
 
@@ -119,7 +147,7 @@ enum
     IP_STOP       = 0x3E,
 
     // Special stimulii
-    IP_SEND_DONE  = 0x1000,
+    IP_SEND_DONE  = 0x105D,
   };
 
 
@@ -157,7 +185,7 @@ volatile int copied_word_bits = 0;
 
 volatile int new_word = 0;
 
-#define BUF_LEN 100
+#define BUF_LEN 300
 
 volatile int buf_in = 0;
 volatile int word_buffer[BUF_LEN];
@@ -165,7 +193,7 @@ volatile int count_buffer[BUF_LEN];
 volatile int blen_buffer[BUF_LEN];
 
 // We build the byte packet in this int, it can be longer than
-// 8 bits as it has th estart bit, stop bit and parity if we have it on
+// 8 bits as it has the start bit, stop bit and parity if we have it on
 
 volatile unsigned int capture_bits_len = 0;
 volatile unsigned int capture_bits = 0xffff;
@@ -263,9 +291,17 @@ void cmd_display(String cmd)
   
   for(i=0; i<buf_in; i++)
     {
-      sprintf(line, "%d %02X (%d bits)", count_buffer[i], word_buffer[i], blen_buffer[i]);
-      Serial.print("*");
+      if( (word_buffer[i] & 0xff00) == 0 )
+	{
+      sprintf(line, " %d %02X (%d bits)", count_buffer[i], word_buffer[i], blen_buffer[i]);
       Serial.println(line);
+	}
+      else
+	{
+	  sprintf(line, "T%04X %04X %04X", count_buffer[i], word_buffer[i], blen_buffer[i]);
+	  Serial.println(line);
+	  
+	}
     }
 }
 
@@ -517,12 +553,23 @@ void core_writefile(boolean oled_nserial)
     }
 }
 
+void cmd_port(String cmd)
+{
+  int pb;
+
+  while(1)
+    {
+      pb = GPIOB->IDR;
+      Serial.println(pb, HEX);
+    }
+}
+
 void cmd_writefile(String cmd)
 {
   core_writefile(false);
 }
 
-const int NUM_CMDS = 14;
+const int NUM_CMDS = 15;
 
 String cmd;
 struct
@@ -532,8 +579,8 @@ struct
 } cmdlist [NUM_CMDS] =
   {
     {"m",           cmd_modify},
-    {"clear",       cmd_clear},
-    {"display",     cmd_display},
+    {"c",           cmd_clear},
+    {"d",           cmd_display},
     {"next",        cmd_next},
     {"prev",        cmd_prev},
     {"i",           cmd_index},
@@ -544,6 +591,7 @@ struct
     {"help",        cmd_help},
     {"read",        cmd_readfile},
     {"delete",      cmd_deletefile},
+    {"port",        cmd_port},
     {"-",           cmd_null},
   };
 
@@ -1332,14 +1380,24 @@ void setup() {
   init_buttons();
 
   // We want an interrupt on rising edge of clock
-  attachInterrupt(digitalPinToInterrupt(SPPin), lowISR,  RISING);
+  attachInterrupt(digitalPinToInterrupt(SPPin), spISR,  CHANGE);
   attachInterrupt(digitalPinToInterrupt(CEPin), ceISR,  CHANGE);
+  attachInterrupt(digitalPinToInterrupt(OPPin), opISR,  CHANGE);
     
   //  attachInterrupt(digitalPinToInterrupt(SIOTXDPin), highISR, RISING);
 }
 
-int loopcnt = 0;
-volatile int captured_word = 0;
+
+void buffer_point(int captured_word, int packet_count, int word_bits)
+{
+  if( buf_in < BUF_LEN )
+    {
+      word_buffer[buf_in]  = captured_word;
+      count_buffer[buf_in] = packet_count;
+      blen_buffer[buf_in]  = word_bits;
+      buf_in++;
+    }
+}
 
 void loop() {
   int i;
@@ -1410,33 +1468,172 @@ void loop() {
     }
 }
 
-volatile long t, t2 = 0;
-long delta = 0;
-volatile long hz2400=0, hz1200=0;
+void start_of_packet()
+{
+  int pb = GPIOB->IDR;
+  int op = ISOLATE_BIT(4, pb);
 
-// The ISRs look at edges on the TXD line. The delats between the edges are
-// processed to get the data stream.
+  captured_word = 0;
+  word_bits = 0;
 
-// 
-// This is called when a falling edge is detected on the TXD pin
-//
-volatile int in_byte = 0;
-volatile int isr_send_bits = 0;
-volatile int isr_send_data = 0;
-volatile int isr_send_bits_save = 0;
-volatile boolean isr_send_flag = false;
+  // Record current OP state so we can detect changes
+  isr_current_op = op;
+
+  buffer_point(0x1055, 0, 0);
+}
+
+
+void end_of_packet()
+{
+  buffer_point(0x10E0, ce_isr_state, captured_word);
+
+  // End of packet means data input
+  pinMode(D3Pin, INPUT);
+
+#if DROP_ZERO_BIT_PACKETS
+  // Ignore zero bit packets
+  if( word_bits == 0 )
+    {
+      buffer_point(0x10E1, 0x1919, 0x1919);
+      return;
+    }
+#endif
+  
+  copied_word = captured_word;
+  copied_word_bits = word_bits;
+
+  new_word = 1;
+
+  buffer_point(captured_word, packet_count, word_bits);
+  
+  // *290 19 (6 bits)
+  // *291 01 (5 bits)
+  // *292 03 (6 bits)
+  // *293 06 (7 bits)
+  // *294 28 (6 bits)
+  // *295 04 (6 bits)
+  // *296 08 (7 bits)
+  // *297 04 (6 bits)
+  // *298 00 (1 bits)
+  // *299 04 (6 bits)
+  // *300 04 (6 bits)
+  // Work out what to do
+  // We don't have a lot of time so use a simple
+  // nested switch FSM
+  // *10315 19 (6 bits)
+  // *10316 03 (6 bits)
+  // *10317 00 (1 bits)
+  // *10318 19 (6 bits)
+  // *10319 03 (6 bits)
+  // *10320 00 (1 bits)
+  // *10321 19 (6 bits)
+  // *10322 03 (6 bits)
+  // *10323 00 (1 bits)
+  // *10324 00 (6 bits)
+  // *10325 3E (6 bits)
+
+  // 502p inv save inv exe sequence
+  //      *6 0C (6 bits)
+  //	*7 00 (1 bits)
+  //	*8 28 (6 bits)
+  //	*9 08 (7 bits)
+  //	*10 08 (7 bits)
+
+  switch(ce_isr_state)
+    {
+    case CIS_IDLE:
+      switch(captured_word)
+	{
+	case IP_502A:
+	  ce_isr_state = CIS_502_PO_1;
+	  break;
+	      
+	case IP_UNKA:
+	  ce_isr_state = CIS_RX_UNKNOWN_A;
+	  break;
+
+	case IP_WAIT:
+	  ce_isr_state = CIS_RX_WAIT;
+
+	  // We want to send a 0 bit on the next clock cycle,
+	  // set it up
+	  isr_send_data = DATA_BIT_VAL; // will be inverted
+	  isr_send_bits = 1;
+	  isr_send_bits_save = 1;
+	  isr_send_flag = true;
+	  break;
+	}
+      break;
+	  
+    case CIS_RX_WAIT:
+      switch(captured_word)
+	{
+	case IP_SEND_DONE:
+	  // We have sent data, now continue
+	  cis_flag_event = true;
+	  cis_event = "data bit sent";
+	  ce_isr_state = CIS_IDLE;
+	  break;
+	}
+      break;
+	  
+    case CIS_RX_UNKNOWN_A:
+      switch(captured_word)
+	{
+	case IP_PRESENCE:
+	  // We need to send a bit after this command
+	  isr_send_bits = 1;
+	  isr_send_data = DATA_BIT_VAL;
+	  isr_send_bits_save = 1;
+	  isr_send_flag = true;
+	  break;
+	}
+      break;
+	  
+    case CIS_502_PO_1:
+      switch(captured_word)
+	{
+	case IP_STOP:
+	  cis_flag_event = true;
+	  cis_event = "fx502p po";
+	  ce_isr_state = CIS_IDLE;
+	  break;
+	}
+      break;
+	  
+    }
+  packet_count++;
+  buffer_point(0x10E1, 0, 0);
+}
+
 
 // SP has had an edge
 
-void lowISR()
+void spISR()
 {
   int pb = GPIOB->IDR;
-  int sp = (pb & (1<<12)) >> 12;
-  int d = (pb & 8) >> 3;
+  int sp = ISOLATE_BIT(12, pb);
+  int d =  ISOLATE_BIT(3, pb);
+  int op = ISOLATE_BIT(4, pb);
+  int ce = ISOLATE_BIT(13, pb);
   
   digitalWrite(statPin, HIGH);
+
+#if TRACE_CLOCKS  
+  buffer_point(0x10C1, sp, sp);
+#endif
+  
+  // If ce is not asserted then we just exit, we ignore
+  // anything not for us
+  if( !ce )
+    {
+      return;
+    }
+  
   if( isr_send_flag )
     {
+      buffer_point(0x105E, isr_send_bits, isr_send_data);
+      
       // We are required to send bits
       if( sp )
 	{
@@ -1449,7 +1646,8 @@ void lowISR()
 	      // All done
 	      // Set as input again
 	      pinMode(D3Pin, INPUT);
-
+	      buffer_point(0x1051, 0x111, 0x111);
+	      
 	      // Turn send flag off
 	      isr_send_flag = false;
 
@@ -1465,10 +1663,28 @@ void lowISR()
 	  // Invert it
 	  digitalWrite(D3Pin, (isr_send_data & 1)?LOW:HIGH);
 	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
+	  buffer_point(0x1050, 0x0, 0x0);
 	}
     }
   else
     {
+      // Has OP changed?
+      // If so we end this packet, but only if ce is active
+      
+      if( op != isr_current_op,0 )
+	{
+	  buffer_point(0x10BB, op, op);
+	  
+	  // End of this packet
+	  end_of_packet();
+
+	  // Start of next one
+	  start_of_packet();
+	}
+
+      // New current value for OP
+      isr_current_op = op;
+      
       // We are reading data
       if( sp )
 	{
@@ -1489,146 +1705,32 @@ void lowISR()
 }
 
 
-// CE ISR states
-
-enum
-  {
-    CIS_IDLE = 0,
-    CIS_502_PO_1,
-    CIS_RX_UNKNOWN_A,
-    CIS_RX_WAIT,
-  };
-
-int ce_isr_state = CIS_IDLE;
-
-#define DATA_BIT_VAL 0
+// A packet has just started, or, more accurately we have just had
+// an asserted CE
+// We end the packet when CE de-asserts.
+// OP has to be monitored as we use that to determine when the
+// current command has ended and we need to process the next
+// command or data bit
 
 void ceISR()
 {
   int pb = GPIOB->IDR;
-  int ce = (pb & (1<<13)) >> 13;
+  int ce = ISOLATE_BIT(13, pb);
 
   digitalWrite(statPin, HIGH);
 
+  buffer_point(0x10CE, ce, ce);
+  
   // One more rising CE
   ce_count++;
 
   if( ce )
     {
-      captured_word = 0;
-      word_bits = 0;
+      start_of_packet();
     }
   else
     {
-      copied_word = captured_word;
-      copied_word_bits = word_bits;
-
-      new_word = 1;
-
-      if( buf_in < BUF_LEN )
-	{
-	  word_buffer[buf_in]  = captured_word;
-	  count_buffer[buf_in] = packet_count;
-	  blen_buffer[buf_in]  = word_bits;
-	  buf_in++;
-	}
-      // *290 19 (6 bits)
-      // *291 01 (5 bits)
-      // *292 03 (6 bits)
-      // *293 06 (7 bits)
-      // *294 28 (6 bits)
-      // *295 04 (6 bits)
-      // *296 08 (7 bits)
-      // *297 04 (6 bits)
-      // *298 00 (1 bits)
-      // *299 04 (6 bits)
-      // *300 04 (6 bits)
-      // Work out what to do
-      // We don't have a lot of time so use a simple
-      // nested switch FSM
-      // *10315 19 (6 bits)
-      // *10316 03 (6 bits)
-      // *10317 00 (1 bits)
-      // *10318 19 (6 bits)
-      // *10319 03 (6 bits)
-      // *10320 00 (1 bits)
-      // *10321 19 (6 bits)
-      // *10322 03 (6 bits)
-      // *10323 00 (1 bits)
-      // *10324 00 (6 bits)
-      // *10325 3E (6 bits)
-
-      // 502p inv save inv exe sequence
-      //      *6 0C (6 bits)
-      //	*7 00 (1 bits)
-      //	*8 28 (6 bits)
-      //	*9 08 (7 bits)
-      //	*10 08 (7 bits)
-
-      switch(ce_isr_state)
-	{
-	case CIS_IDLE:
-	  switch(captured_word)
-	    {
-	    case IP_502A:
-	      ce_isr_state = CIS_502_PO_1;
-	      break;
-	      
-	    case IP_UNKA:
-	      ce_isr_state = CIS_RX_UNKNOWN_A;
-	      break;
-
-	    case IP_WAIT:
-	      ce_isr_state = CIS_RX_WAIT;
-
-	      // We want to send a 0 bit on the next clock cycle,
-	      // set it up
-	      isr_send_data = DATA_BIT_VAL; // will be inverted
-	      isr_send_bits = 1;
-	      isr_send_bits_save = 1;
-	      isr_send_flag = true;
-	      break;
-	    }
-	  break;
-	  
-	case CIS_RX_WAIT:
-	  switch(captured_word)
-	    {
-	    case IP_SEND_DONE:
-	      // We have sent data, now continue
-	      cis_flag_event = true;
-	      cis_event = "data bit sent";
-	      ce_isr_state = CIS_IDLE;
-	      break;
-	    }
-	  break;
-	  
-	case CIS_RX_UNKNOWN_A:
-	  switch(captured_word)
-	    {
-	    case IP_PRESENCE:
-	      // We need to send a bit after this command
-	      isr_send_bits = 1;
-	      isr_send_data = DATA_BIT_VAL;
-	      isr_send_bits_save = 1;
-	      isr_send_flag = true;
-	      break;
-	    }
-	  break;
-	  
-	case CIS_502_PO_1:
-	  switch(captured_word)
-	    {
-	    case IP_STOP:
-	      cis_flag_event = true;
-	      cis_event = "fx502p po";
-	      ce_isr_state = CIS_IDLE;
-	      break;
-	    }
-	  break;
-	  
-	}
-      packet_count++;
+      end_of_packet();
     }
   
   
@@ -1636,4 +1738,23 @@ void ceISR()
 }
 
 
+// If OP changes state then it's the end of a packet
+// and the start of a new one.
+#if 1
 
+void opISR()
+{
+  int pb = GPIOB->IDR;
+  int op = ISOLATE_BIT(4, pb);
+ 
+  digitalWrite(statPin, HIGH);
+
+  buffer_point(0x10CC, op, op);
+  
+  end_of_packet();
+  start_of_packet();
+ 
+  digitalWrite(statPin, LOW);
+  
+}
+#endif
