@@ -198,6 +198,14 @@ volatile int word_buffer[BUF_LEN];
 volatile uint8_t blen_buffer[BUF_LEN];
 volatile int num_data_words = 0;
 
+// This is where data words appear
+#define NUM_DATA_WORDS  450
+
+volatile int data_word_in_index = 0;
+volatile int data_word_out_index = 0;
+
+volatile int data_words[NUM_DATA_WORDS];
+
 // We build the byte packet in this int, it can be longer than
 // 8 bits as it has the start bit, stop bit and parity if we have it on
 
@@ -292,6 +300,10 @@ void cmd_display(String cmd)
   
   Serial.print("Buffer Count:");
   Serial.print(buf_in);
+  Serial.print("  Word in:");
+  Serial.print(data_word_in_index);
+  Serial.print("  Word out:");
+  Serial.print(data_word_out_index);
   Serial.print("  Num data words:");
   Serial.print(num_data_words);
 
@@ -309,6 +321,12 @@ void cmd_display(String cmd)
 	  sprintf(line, "T%04X %04X", word_buffer[i], blen_buffer[i]);
 	  Serial.println(line);
 	}
+    }
+
+  for(i=0; i<NUM_DATA_WORDS; i++)
+    {
+      sprintf(line, " %d %04X", i, data_words[i]);
+      Serial.println(line);
     }
 }
 
@@ -1643,14 +1661,17 @@ void end_of_packet()
 	  // If data is all 1s then it is header data
 	  num_data_words++;
 	  
-	  if( captured_word == 0xFFFF )
+	  if( (captured_word & 0xFFF0) == 0xFFF0 )
 	    {
+	      // Header word, ignore it
 	      // Back for more data
 	      ce_isr_state = CIS_WAIT_2;
 	    }
 	  else
 	    {
 	      // Store this data
+	      data_words[data_word_in_index++] = captured_word;
+	      data_word_in_index = (data_word_in_index % NUM_DATA_WORDS);
 	      ce_isr_state = CIS_WAIT_2;
 	    }
 	}
