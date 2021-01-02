@@ -186,7 +186,6 @@ int bytecount = 24;
 volatile int sp_count=0;
 volatile int ce_count=0;
 volatile int copied_word = 0;
-volatile int packet_count = 0;
 volatile int word_bits = 0;
 volatile int copied_word_bits = 0;
 
@@ -196,7 +195,6 @@ volatile int new_word = 0;
 
 volatile int buf_in = 0;
 volatile int word_buffer[BUF_LEN];
-volatile uint8_t count_buffer[BUF_LEN];
 volatile uint8_t blen_buffer[BUF_LEN];
 volatile int num_data_words = 0;
 
@@ -303,14 +301,13 @@ void cmd_display(String cmd)
     {
       if( (word_buffer[i] & 0xff00) != 0x1000 )
 	{
-      sprintf(line, " %d %02X (%d bits)", count_buffer[i], word_buffer[i], blen_buffer[i]);
+      sprintf(line, " %02X (%d bits)", word_buffer[i], blen_buffer[i]);
       Serial.println(line);
 	}
       else
 	{
-	  sprintf(line, "T%04X %04X %04X", count_buffer[i], word_buffer[i], blen_buffer[i]);
+	  sprintf(line, "T%04X %04X", word_buffer[i], blen_buffer[i]);
 	  Serial.println(line);
-	  
 	}
     }
 }
@@ -1402,12 +1399,11 @@ void setup() {
 }
 
 
-void buffer_point(int captured_word, int packet_count, int word_bits)
+void buffer_point(int captured_word, int word_bits)
 {
   if( buf_in < BUF_LEN )
     {
       word_buffer[buf_in]  = captured_word;
-      count_buffer[buf_in] = packet_count;
       blen_buffer[buf_in]  = word_bits;
       buf_in++;
     }
@@ -1455,9 +1451,7 @@ void loop() {
       Serial.print(" ");
       Serial.print(copied_word, HEX);
       Serial.print(" ");
-      Serial.print(copied_word_bits, HEX);
-      Serial.print(" ");
-      Serial.println(packet_count);
+      Serial.println(copied_word_bits, HEX);
 
 #if 0      
       //      display.clearDisplay();
@@ -1532,7 +1526,7 @@ void end_of_packet()
 
   new_word = 1;
 
-  buffer_point(captured_word, packet_count, word_bits);
+  buffer_point(captured_word, word_bits);
   
   // We don't have a lot of time so use a simple
   // nested switch FSM
@@ -1590,7 +1584,7 @@ void end_of_packet()
 #if 0
 	case IP_RESET:
 	  // End of data, signal event and back to idle
-	  if( packet_count == 6 )
+	  if(  == 6 )
 	    {
 	      cis_flag_event = true;
 	      cis_event = "Data received";
@@ -1642,7 +1636,7 @@ void end_of_packet()
       break;
 
     case CIS_WAIT_DATA:
-      if(packet_count == 16)
+      if(word_bits == 16)
 	{
 	  // 16 bits of data
 	  
@@ -1703,7 +1697,7 @@ void end_of_packet()
       break;
 	  
     }
-  packet_count++;
+
 #if TRACE_TAGS
   buffer_point(0x10E1, 0, 0);
 #endif
