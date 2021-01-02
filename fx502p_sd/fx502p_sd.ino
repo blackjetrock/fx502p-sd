@@ -71,13 +71,16 @@ enum
     CIS_RX_WAIT,
     CIS_WAIT_2,
     CIS_WAIT_3,
+    CIS_WAIT_TRANS,
+    CIS_WAIT_DATA,
   };
 
 // Commands
 enum
   {
     // Data words
-    IP_502A         = 0x00,
+    IP_RESET        = 0x00,
+    IP_TRANSFER     = 0x02,
     IP_PRESENCE     = 0x03,
     IP_READ_STATUS  = 0x04,
     IP_WAIT         = 0x0c,
@@ -194,6 +197,7 @@ volatile int buf_in = 0;
 volatile int word_buffer[BUF_LEN];
 volatile uint8_t count_buffer[BUF_LEN];
 volatile uint8_t blen_buffer[BUF_LEN];
+volatile int num_data_words = 0;
 
 // We build the byte packet in this int, it can be longer than
 // 8 bits as it has the start bit, stop bit and parity if we have it on
@@ -289,6 +293,8 @@ void cmd_display(String cmd)
   
   Serial.print("Buffer Count:");
   Serial.print(buf_in);
+  Serial.print("  Num data words:");
+  Serial.print(num_data_words);
 
   Serial.println("");
   
@@ -1250,7 +1256,6 @@ HardwareSerial Serial2(PB11, PB10);
 void setup() {
 
   Wire.begin();
-  pinMode(SPPin, OUTPUT_OPEN_DRAIN);
   pinMode(SPPin, INPUT);
   
   pinMode(PA0, INPUT);
@@ -1524,7 +1529,7 @@ void end_of_packet()
     case CIS_IDLE:
       switch(captured_word)
 	{
-	case IP_502A:
+	case IP_RESET:
 	  ce_isr_state = CIS_502_PO_1;
 	  break;
 	      
@@ -1534,13 +1539,19 @@ void end_of_packet()
 
 	case IP_WAIT:
 	  ce_isr_state = CIS_RX_WAIT;
-
+	  num_data_words = 0;
+	  
 	  // We want to send a 0 bit on the next clock cycle,
 	  // set it up
 	  isr_send_data = 0;
 	  isr_send_bits = 1;
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
+
+	  // Prepare output
+	  digitalWrite(D3Pin, HIGH);
+	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
+
 	  break;
 	}
       break;
@@ -1558,30 +1569,117 @@ void end_of_packet()
     case CIS_WAIT_2:
       switch(captured_word)
 	{
-	case IP_502B:
+	case IP_READ_STATUS:
 	  // We have the next packet, we need to send a data bit
 	  // for this one too
 	  isr_send_bits = 1;
 	  isr_send_data = 1;
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
+
+	  // Prepare output
+	  digitalWrite(D3Pin, HIGH);
+	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
+
 	  ce_isr_state = CIS_WAIT_3;
 	  break;
+#if 0
+	case IP_RESET:
+	  // End of data, signal event and back to idle
+	  if( packet_count == 6 )
+	    {
+	      cis_flag_event = true;
+	      cis_event = "Data received";
+	      
+	      ce_isr_state = CIS_IDLE;
+	    }
+	  break;
+#endif
 	}
+      
       break;
 
     case CIS_WAIT_3:
       switch(captured_word)
 	{
 	case IP_SEND_DONE:
+	  // Status sent so now we wait for the transfer command
+#if 0
 	  cis_flag_event = true;
 	  cis_event = "inv EXE";
-	  ce_isr_state = CIS_WAIT_2;
+#endif
+	  ce_isr_state = CIS_WAIT_TRANS;
 
 	  break;
 	}
       break;
+      
+    case CIS_WAIT_TRANS:
+      switch(captured_word)
+	{
+	case IP_READ_STATUS:
+	  // We have the next packet, we need to send a data bit
+	  // for this one too
+	  isr_send_bits = 1;
+	  isr_send_data = 1;
+	  isr_send_bits_save = 1;
+	  isr_send_flag = true;
+
+	  // Prepare output
+	  digitalWrite(D3Pin, HIGH);
+	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
+
+	  ce_isr_state = CIS_WAIT_3;
+	  break;
+#if 1
+	case IP_TRANSFER:
+	  // We have the transfer command so now wait for
+	  // data
+	  ce_isr_state = CIS_WAIT_DATA;
+#endif
+	  break;
+	}
+      break;
+
+    case CIS_WAIT_DATA:
+      if(packet_count == 16)
+	{
+	  // 16 bits of data
 	  
+	  // If data is all 1s then it is header data
+	  num_data_words++;
+	  
+	  if( captured_word == 0xFFFF )
+	    {
+	      // Back for more data
+	      ce_isr_state = CIS_WAIT_2;
+	    }
+	  else
+	    {
+	      // Store this data
+	      ce_isr_state = CIS_WAIT_2;
+	    }
+	}
+
+      switch(captured_word)
+	{
+	case IP_READ_STATUS:
+	  // We have the next packet, we need to send a data bit
+	  // for this one too
+	  isr_send_bits = 1;
+	  isr_send_data = 1;
+	  isr_send_bits_save = 1;
+	  isr_send_flag = true;
+
+	  // Prepare output
+	  digitalWrite(D3Pin, HIGH);
+	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
+
+	  ce_isr_state = CIS_WAIT_TRANS;
+	  break;
+	}
+      break;
+      
     case CIS_RX_UNKNOWN_A:
       switch(captured_word)
 	{
@@ -1591,6 +1689,11 @@ void end_of_packet()
 	  isr_send_data = 0;
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
+
+	  // Prepare output
+	  digitalWrite(D3Pin, HIGH);
+	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
+
 	  break;
 	}
       break;
@@ -1688,6 +1791,7 @@ void spISR()
 	      digitalWrite(D3Pin, HIGH);
 	      pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
 	    }
+	  
 #if TRACE_TAGS
 	  buffer_point(0x1050, 0x0, 0x0);
 #endif
