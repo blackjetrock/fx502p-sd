@@ -1,7 +1,8 @@
 //
 // Sketch to attach to fx502p and read/write data to.from SD card
 //
-//
+// We should be able to leave the data line as an open collector
+// output, even when we want to use it as an input
 
 #include <SPI.h>
 #include <SD.h>
@@ -1257,7 +1258,12 @@ void setup() {
 
   Wire.begin();
   pinMode(SPPin, INPUT);
+
+  // Make data line open drain output. We can read from it when set to
+  // high as it is just a pull-up. Not having to call
+  // pinMode saves us cycles
   
+  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
   pinMode(PA0, INPUT);
   pinMode(PA1, INPUT);
   pinMode(PA2, INPUT);
@@ -1492,7 +1498,14 @@ void start_of_packet()
 #endif
 }
 
+////////////////////////////////////////////////////////////////////////////////
+//
+//
 // Processes the end of a packet. uses an FSM to decide what to do next
+//
+// This needs to be fast so we don't miss any subsequent interrupts
+//
+////////////////////////////////////////////////////////////////////////////////
 
 void end_of_packet()
 {
@@ -1500,8 +1513,8 @@ void end_of_packet()
   buffer_point(0x10E0, ce_isr_state, captured_word);
 #endif
 
-  // End of packet means data input
-  pinMode(D3Pin, INPUT);
+  // End of packet means data input, so set output HIGH
+  digitalWrite(D3Pin, HIGH);
 
 #if DROP_ZERO_BIT_PACKETS
   // Ignore zero bit packets
@@ -1547,11 +1560,6 @@ void end_of_packet()
 	  isr_send_bits = 1;
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
-
-	  // Prepare output
-	  digitalWrite(D3Pin, HIGH);
-	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
-
 	  break;
 	}
       break;
@@ -1576,10 +1584,6 @@ void end_of_packet()
 	  isr_send_data = 1;
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
-
-	  // Prepare output
-	  digitalWrite(D3Pin, HIGH);
-	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
 
 	  ce_isr_state = CIS_WAIT_3;
 	  break;
@@ -1625,10 +1629,6 @@ void end_of_packet()
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
 
-	  // Prepare output
-	  digitalWrite(D3Pin, HIGH);
-	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
-
 	  ce_isr_state = CIS_WAIT_3;
 	  break;
 #if 1
@@ -1671,9 +1671,6 @@ void end_of_packet()
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
 
-	  // Prepare output
-	  digitalWrite(D3Pin, HIGH);
-	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
 
 	  ce_isr_state = CIS_WAIT_TRANS;
 	  break;
@@ -1689,10 +1686,6 @@ void end_of_packet()
 	  isr_send_data = 0;
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
-
-	  // Prepare output
-	  digitalWrite(D3Pin, HIGH);
-	  pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
 
 	  break;
 	}
@@ -1758,7 +1751,8 @@ void spISR()
 	    {
 	      // All done
 	      // Set as input again
-	      pinMode(D3Pin, INPUT);
+	      digitalWrite(D3Pin, HIGH);
+
 #if TRACE_TAGS
 	      buffer_point(0x1051, 0x111, 0x111);
 #endif
@@ -1781,15 +1775,10 @@ void spISR()
 	      // Send a 1 (inverted logic) by writing a 0 and
 	      // driving open collector output
 	      digitalWrite(D3Pin, LOW);
-	      pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
-
 	    }
 	  else
 	    {
 	      // Send a 0 (inverted to a 1) by doing nothing
-	      // we ensure data line is input just to make sure
-	      digitalWrite(D3Pin, HIGH);
-	      pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
 	    }
 	  
 #if TRACE_TAGS
