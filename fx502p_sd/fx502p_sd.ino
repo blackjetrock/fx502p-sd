@@ -1,8 +1,16 @@
 //
-// Sketch to attach to fx502p and read/write data to.from SD card
+// Sketch to attach to fx502p and read/write data to/from SD card
 //
-// We should be able to leave the data line as an open collector
-// output, even when we want to use it as an input
+// This sketch accepts commands from the 502p and stores the data
+// words on the SD card under a filename specified on the 502p. This
+// is a three digit number. When loading back the data words are sent
+// as they were received.
+//
+// We leave the data line as an open drain
+// output, even when we want to use it as an input. This saves the
+// cycles needed to call pinMode(). Time is short when processing
+// the commands from the 502p
+//
 
 #include <SPI.h>
 #include <SD.h>
@@ -17,6 +25,11 @@
 #define TRACE_CLOCKS          0
 #define TRACE_TAGS            0
 
+#define STAT_OP               0
+#define STAT_CE               0
+#define STAT_SP               1
+#define STAT_BITS_0           0
+
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
@@ -24,6 +37,20 @@
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+char nibble_rev(char x)
+{
+  int i;
+  uint8_t r = 0;
+  
+  for(i=0; i<4; i++)
+    {
+      r<<=1;
+      r+= (x & 1);
+      x>>=1;
+    }
+  
+  return(r);
+}
 
 // set up variables using the SD utility library functions:
 Sd2Card card;
@@ -32,10 +59,10 @@ SdFile root;
 
 int filename_index = 0;
 
-const int chipSelect = 4;
+const int chipSelect = PA4;
 
 // Pins for fx502p interface
-const int D3Pin     = PB3;
+const int D3Pin      = PB3;
 const int OPPin      = PB4;
 
 const int SPPin      = PB12;
@@ -51,9 +78,14 @@ const int dataPin   = PC14;
 
 
 // FSM output flags
-boolean cis_flag_502_po = false;
 boolean cis_flag_event = false;
 char *cis_event = "None";
+
+// Event flags
+boolean cis_flag_event_read_file = false;  // File data has been read
+
+// File number of data file
+char filenum[4] = "...";
 
 int loopcnt = 0;
 volatile int captured_word = 0;
@@ -66,14 +98,14 @@ File dumpfile;
 
 enum
   {
-    CIS_IDLE = 0,
-    CIS_502_PO_1,
-    CIS_RX_UNKNOWN_A,
-    CIS_RX_WAIT,
-    CIS_WAIT_2,
-    CIS_WAIT_3,
-    CIS_WAIT_TRANS,
-    CIS_WAIT_DATA,
+    CIS_IDLE          = 0,
+    CIS_502_PO_1      = 1,
+    CIS_RX_UNKNOWN_A  = 2,
+    CIS_RX_WAIT       = 3,
+    CIS_WAIT_2        = 4,
+    CIS_WAIT_3        = 5,
+    CIS_WAIT_TRANS    = 6,
+    CIS_WAIT_DATA     = 7,
   };
 
 // Commands
@@ -108,8 +140,6 @@ const int button1Pin = PA0;
 const int button2Pin = PA1;
 const int button3Pin = PC15;
 
-
-
 volatile int in_byte = 0;
 volatile int isr_send_bits = 0;
 volatile int isr_send_data = 0;
@@ -117,6 +147,11 @@ volatile int isr_send_bits_save = 0;
 volatile boolean isr_send_flag = false;
 volatile int isr_current_op = 0;
 volatile int ce_isr_state = CIS_IDLE;
+
+// The serial monitor cannot run while we are capturing data as
+// I think it disables interrupts. This causes problems for our
+// decoding
+volatile boolean monitor_enabled = true;
 
 typedef unsigned char BYTE;
 
@@ -183,17 +218,16 @@ int bytecount = 24;
 
 // communication with ISRs
 
-volatile int sp_count=0;
-volatile int ce_count=0;
 volatile int copied_word = 0;
 volatile int word_bits = 0;
 volatile int copied_word_bits = 0;
 
 volatile int new_word = 0;
 
-#define BUF_LEN 1500
+#define BUF_LEN 1000
 
 volatile int buf_in = 0;
+volatile uint8_t state_buffer[BUF_LEN];
 volatile int word_buffer[BUF_LEN];
 volatile uint8_t blen_buffer[BUF_LEN];
 volatile int num_data_words = 0;
@@ -313,12 +347,12 @@ void cmd_display(String cmd)
     {
       if( (word_buffer[i] & 0xff00) != 0x1000 )
 	{
-      sprintf(line, " %02X (%d bits)", word_buffer[i], blen_buffer[i]);
+	  sprintf(line, " %02X (%d bits) S%d", word_buffer[i], blen_buffer[i], state_buffer[i]);
       Serial.println(line);
 	}
       else
 	{
-	  sprintf(line, "T%04X %04X", word_buffer[i], blen_buffer[i]);
+	  sprintf(line, "T%04X %04X S%d", word_buffer[i], blen_buffer[i], state_buffer[i]);
 	  Serial.println(line);
 	}
     }
@@ -335,7 +369,9 @@ void cmd_display(String cmd)
 
 void cmd_clear(String cmd)
 {
-  buf_in = 0;  
+  buf_in = 0;
+  num_data_words = 0;
+  data_word_in_index = 0;
 }
 
 
@@ -498,14 +534,9 @@ void core_writefile(boolean oled_nserial)
   char filename[20] = "U___.txt";
   int i;
 
-  do
-    {
-      sprintf(filename, "PCG%04d.DAT", filename_index++);
-    }
-
-  while( SD.exists(filename) );
+  sprintf(filename, "FILE%s.DAT", filenum);
   
-    if( oled_nserial )
+  if( oled_nserial )
     {
       display.clearDisplay();
       display.setCursor(0,0);
@@ -538,9 +569,9 @@ void core_writefile(boolean oled_nserial)
   if( myFile )
     {
       // Write data
-      for(i=0; i<bytecount; i++)
+      for(i=0; i<data_word_in_index; i++)
 	{
-	  myFile.write(stored_bytes[i]);
+	  myFile.println(data_words[i], HEX);
 	}
       
       myFile.close();
@@ -1383,17 +1414,18 @@ void setup() {
 #else
     
   if (!SD.begin(chipSelect)) {
+    //if (!card.init(SPI_HALF_SPEED, chipSelect)) {
     Serial.println("SD Card initialisation failed!");
     display.println("SD Fail");
     display.display();
-    delay(2000);
+    //    delay(2000);
   }
   else
     {
       Serial.println("SD card initialised.");
       display.println("SD OK");
       display.display();
-      delay(2000);
+      //delay(2000);
     }
 
 #endif
@@ -1411,7 +1443,7 @@ void setup() {
   // We want an interrupt on rising edge of clock
   attachInterrupt(digitalPinToInterrupt(SPPin), spISR,  CHANGE);
   attachInterrupt(digitalPinToInterrupt(CEPin), ceISR,  CHANGE);
-  attachInterrupt(digitalPinToInterrupt(OPPin), opISR,  CHANGE);
+  //  attachInterrupt(digitalPinToInterrupt(OPPin), opISR,  CHANGE);
     
   //  attachInterrupt(digitalPinToInterrupt(SIOTXDPin), highISR, RISING);
 }
@@ -1423,61 +1455,89 @@ void buffer_point(int captured_word, int word_bits)
     {
       word_buffer[buf_in]  = captured_word;
       blen_buffer[buf_in]  = word_bits;
+      state_buffer[buf_in] = ce_isr_state;
       buf_in++;
     }
 }
+
+int y = 32;
 
 void loop() {
   int i;
   char c;
 
+#if 0
   loopcnt++;
   
-  if( (loopcnt % 50000000) == 0 )
+  if( (loopcnt % 500000) == 0 )
     {
       Serial.println("Loop");
     }
+#endif
   
-  update_buttons();
-  run_monitor();
+  //update_buttons();
 
+  if( monitor_enabled )
+    {
+      run_monitor();
+    }
+  
+#if 1
   if( cis_flag_event )
     {
       cis_flag_event = false;
-      display.fillRect(0, 32, 128, 8, BLACK);
-      display.setCursor(0,32);
+
+      // Get file number from first two word
+#if 1
+      filenum[1] = (unsigned char)(((data_words[0] >> 7) & 0x0F)>>0);
+      filenum[2] = (unsigned char)(((data_words[0] >> 7) & 0xF0)>>4);
+      filenum[0] = (unsigned char)(((data_words[1] >> 7) & 0xF0)>>4);
+      filenum[0] = nibble_rev(filenum[0]);
+      filenum[1] = nibble_rev(filenum[1]);
+      filenum[2] = nibble_rev(filenum[2]);
+      filenum[0] += '0';
+      filenum[1] += '0';
+      filenum[2] += '0';
+      
+      filenum[3] = '\0';
+#endif
+
+      if( cis_flag_event_read_file )
+	{
+	  cis_flag_event_read_file = true;
+	  
+	  // Write data to a file
+	  core_writefile(true);
+	}
+      
+      display.fillRect(0, y, 128, 8, BLACK);
+      display.setCursor(0,y);
+      y += 8;
+      if( y > 56 )
+	{
+	  y = 0;
+	}
       display.print(cis_event);
+      display.print (" '");
+      display.print((char *) &(filenum[0]));
+      display.print("'");
       display.display();
     }
 
-  if( cis_flag_502_po )
-    {
-      cis_flag_502_po = false;
-      display.fillRect(0, 24, 128, 8, BLACK);
-      display.setCursor(0,24);
-      display.print("fx502p PO");
-      display.display();
-    }
-  
   if( new_word )
     {
+#if 0
       new_word = 0;
       
-      Serial.print(sp_count);
-      Serial.print(" ");
-      Serial.print(ce_count);
-      Serial.print(" ");
       Serial.print(copied_word, HEX);
       Serial.print(" ");
-      Serial.println(copied_word_bits, HEX);
-
+      Serial.print(copied_word_bits, HEX);
+      Serial.print(" S");
+      Serial.println(ce_isr_state);
+#endif
 #if 0      
       //      display.clearDisplay();
       display.clearDisplay();
-      display.setCursor(0,0);
-      display.print(sp_count);
-      display.setCursor(0,8);
-      display.print(ce_count);
       display.setCursor(0,16);
       display.print(captured_word, HEX);
       display.setCursor(0,24);
@@ -1485,13 +1545,17 @@ void loop() {
       display.display();
 #endif
     }
-    
+#endif
+  
+#if 0  
   if( Serial2.available(),0 )
     {
       c = Serial2.read();
       Serial.print(" S");
       Serial.println(c,HEX);
     }
+#endif
+  
 }
 
 void start_of_packet()
@@ -1500,8 +1564,16 @@ void start_of_packet()
   int op = ISOLATE_BIT(4, pb);
 
   captured_word = 0;
-  word_bits = 0;
 
+#if STAT_BITS_0
+  digitalWrite(statPin, HIGH);
+  digitalWrite(statPin, LOW);
+  digitalWrite(statPin, HIGH);
+  digitalWrite(statPin, LOW);
+#endif
+  
+  word_bits = 0;
+  
   // Record current OP state so we can detect changes
   isr_current_op = op;
 
@@ -1563,8 +1635,13 @@ void end_of_packet()
 	  break;
 
 	case IP_WAIT:
+	  // Disable monitor
+	  monitor_enabled = false;
+	  
 	  ce_isr_state = CIS_RX_WAIT;
+	  buf_in = 0;
 	  num_data_words = 0;
+	  data_word_in_index = 0;
 	  
 	  // We want to send a 0 bit on the next clock cycle,
 	  // set it up
@@ -1581,7 +1658,12 @@ void end_of_packet()
 	{
 	case IP_SEND_DONE:
 	  // We have sent data, now continue
+	  captured_word = 0;
 	  ce_isr_state = CIS_WAIT_2;
+	  break;
+
+	case IP_STOP:
+	  ce_isr_state = CIS_IDLE;
 	  break;
 	}
       break;
@@ -1589,6 +1671,10 @@ void end_of_packet()
     case CIS_WAIT_2:
       switch(captured_word)
 	{
+	case IP_STOP:
+	  ce_isr_state = CIS_IDLE;
+	  break;
+
 	case IP_READ_STATUS:
 	  // We have the next packet, we need to send a data bit
 	  // for this one too
@@ -1599,15 +1685,17 @@ void end_of_packet()
 
 	  ce_isr_state = CIS_WAIT_3;
 	  break;
-#if 0
+#if 1
 	case IP_RESET:
 	  // End of data, signal event and back to idle
-	  if(  == 6 )
+	  if( word_bits == 6 )
 	    {
 	      cis_flag_event = true;
-	      cis_event = "Data received";
+	      cis_event = "File:";
+	      cis_flag_event_read_file = true;
 	      
 	      ce_isr_state = CIS_IDLE;
+	      monitor_enabled = true;
 	    }
 	  break;
 #endif
@@ -1618,8 +1706,13 @@ void end_of_packet()
     case CIS_WAIT_3:
       switch(captured_word)
 	{
+	case IP_STOP:
+	  ce_isr_state = CIS_IDLE;
+	  break;
+
 	case IP_SEND_DONE:
 	  // Status sent so now we wait for the transfer command
+	  captured_word = 0;
 #if 0
 	  cis_flag_event = true;
 	  cis_event = "inv EXE";
@@ -1633,6 +1726,10 @@ void end_of_packet()
     case CIS_WAIT_TRANS:
       switch(captured_word)
 	{
+	case IP_STOP:
+	  ce_isr_state = CIS_IDLE;
+	  break;
+
 	case IP_READ_STATUS:
 	  // We have the next packet, we need to send a data bit
 	  // for this one too
@@ -1654,6 +1751,7 @@ void end_of_packet()
       break;
 
     case CIS_WAIT_DATA:
+
       if(word_bits == 16)
 	{
 	  // 16 bits of data
@@ -1678,6 +1776,10 @@ void end_of_packet()
 
       switch(captured_word)
 	{
+      	case IP_STOP:
+	  ce_isr_state = CIS_IDLE;
+	  break;
+
 	case IP_READ_STATUS:
 	  // We have the next packet, we need to send a data bit
 	  // for this one too
@@ -1685,7 +1787,6 @@ void end_of_packet()
 	  isr_send_data = 1;
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
-
 
 	  ce_isr_state = CIS_WAIT_TRANS;
 	  break;
@@ -1695,6 +1796,10 @@ void end_of_packet()
     case CIS_RX_UNKNOWN_A:
       switch(captured_word)
 	{
+      	case IP_STOP:
+	  ce_isr_state = CIS_IDLE;
+	  break;
+
 	case IP_PRESENCE:
 	  // We need to send a bit after this command
 	  isr_send_bits = 1;
@@ -1711,7 +1816,7 @@ void end_of_packet()
 	{
 	case IP_STOP:
 	  cis_flag_event = true;
-	  cis_event = "fx502p po";
+	  cis_event = "Reset";
 	  ce_isr_state = CIS_IDLE;
 	  break;
 	}
@@ -1734,9 +1839,11 @@ void spISR()
   int d =  ISOLATE_BIT(3, pb);
   int op = ISOLATE_BIT(4, pb);
   int ce = ISOLATE_BIT(13, pb);
-  
-  digitalWrite(statPin, HIGH);
 
+#if STAT_SP  
+  digitalWrite(statPin, HIGH);
+#endif
+  
 #if TRACE_CLOCKS  
   buffer_point(0x10C1, sp, sp);
 #endif
@@ -1745,9 +1852,13 @@ void spISR()
   // anything not for us
   if( !ce )
     {
+#if STAT_SP      
+      digitalWrite(statPin, LOW);
+#endif
       return;
     }
-  
+
+  // Do we have to send data for this clock?
   if( isr_send_flag )
     {
       
@@ -1803,10 +1914,28 @@ void spISR()
     }
   else
     {
-      // Has OP changed?
+      
+      // We are reading data
+      if( sp )
+	{
+	  // One more rising SP, capture data
+	  captured_word <<= 1;
+	  captured_word += (1-d);
+	  word_bits++;
+#if STAT_BITS_0
+	  digitalWrite(statPin, HIGH);
+	  digitalWrite(statPin, LOW);
+#endif
+	}
+      else
+	{
+	  // If we are in send mode then we need to 
+	}
+
+            // Has OP changed?
       // If so we end this packet, but only if ce is active
       
-      if( op != isr_current_op,0 )
+      if( op != isr_current_op )
 	{
 #if TRACE_TAGS
 	  buffer_point(0x10BB, op, op);
@@ -1821,24 +1950,13 @@ void spISR()
 
       // New current value for OP
       isr_current_op = op;
-      
-      // We are reading data
-      if( sp )
-	{
-	  // One more rising SP, capture data
-	  sp_count++;
-	  
-	  captured_word <<= 1;
-	  captured_word += (1-d);
-	  word_bits++;
-	}
-      else
-	{
-	  // If we are in send mode then we need to 
-	}
+
+
     }
-  
+
+#if STAT_SP  
   digitalWrite(statPin, LOW);
+#endif
 }
 
 
@@ -1854,15 +1972,15 @@ void ceISR()
   int pb = GPIOB->IDR;
   int ce = ISOLATE_BIT(13, pb);
 
+#if STAT_CE
   digitalWrite(statPin, HIGH);
-
+#endif
+  
 #if TRACE_TAGS
   buffer_point(0x10CE, ce, ce);
 #endif
   
   // One more rising CE
-  ce_count++;
-
   if( ce )
     {
       start_of_packet();
@@ -1872,8 +1990,9 @@ void ceISR()
       end_of_packet();
     }
   
-  
+#if STAT_CE
   digitalWrite(statPin, LOW);
+#endif
 }
 
 
@@ -1885,17 +2004,20 @@ void opISR()
 {
   int pb = GPIOB->IDR;
   int op = ISOLATE_BIT(4, pb);
- 
-  digitalWrite(statPin, HIGH);
 
+#if STAT_OP    
+  digitalWrite(statPin, HIGH);
+#endif
+  
 #if TRACE_TAGS
   buffer_point(0x10CC, op, op);
 #endif
   
   end_of_packet();
   start_of_packet();
- 
+
+#if STAT_OP  
   digitalWrite(statPin, LOW);
-  
+#endif  
 }
 #endif
