@@ -10,7 +10,7 @@ proc open_file_window {w fn} {
     set f [open $fn]
     set filetext [read $f]
     close $f
-
+    
     set width 80
     set height 40
     
@@ -22,6 +22,14 @@ proc open_file_window {w fn} {
     grid rowconfigure    $w 0 -weight 1
     grid columnconfigure $w 0 -weight 1
 
+    # Put the data in the window and decode it as we go along
+    foreach line [split $filetext "\n"] {
+	if { [string length $line] > 0 } {
+	    set v [expr 0x$line >> 4]
+	    
+	    $w.text insert end "$line\n"
+	}
+    }
 }
 
 
