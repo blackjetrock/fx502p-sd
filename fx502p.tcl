@@ -3,7 +3,7 @@
 # Script that processes the fx502p files that come from the SD card gadget
 #
 #
-9
+
 set ::KEYWORDS {
       P0      P1     P2      P3      P4      P5      P6      P7      P8      P9     0     1      2      3    .    EXP
     RND0    RND1     RND2   RND3   RND4    RND5    RND6    RND7    RND8   RND9    4     5      6      7    8    9
