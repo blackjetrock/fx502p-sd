@@ -19,7 +19,13 @@ set ::KEYWORDS {
     Min10   Min11   Min12   Min13   Min14   Min15   Min16   Min17   Min18   Min19   
     M-10    M-11    M-12    M-13    M-14    M-15    M-16    M-17    M-18    M-19    
     M+10    M+11    M+12    M+13    M+14    M+15    M+16    M+17    M+18    M+19    
-    X<.MF   MinF    MRF     M-F     M+F     ?F5
+    X<>MF   MinF    MRF     M-F     M+F     ?F5
+}
+
+puts $::KEYWORDS
+
+for {set i 0} {$i <256} {incr i 1} {
+    puts [format "%02X: '%s'" $i [lindex $::KEYWORDS $i]]
 }
 
 # Bit reverses a number
@@ -69,17 +75,22 @@ proc open_file_window {w fn} {
 	    set n2 [reverse $n2 4]
 	    set st [reverse $st 2]
 
-	    set kw [lindex $::KEYWORDS [expr 0x$n2$n1]]
+	    set index [expr $n2*16+$n1]
+	    set kw [lindex $::KEYWORDS $index]
 
 	    switch $widx {
 		0 {
 		    incr widx 1
-		    set hexval [format "%04X %d %01X %01X %d %01X %01X%01X  %s "  $v $s $n1 $n2 $pa $st $n2 $n1 $kw] 
+		    set hexval [format "%04X %d %01X %01X %d %01X %01X%01X"  $v $s $n1 $n2 $pa $st $n2 $n1 $kw]
+		    set fn2 $n1
+		    set fn1 $n2
 		}
 
 		1 {
 		    incr widx 1
 
+		    set fn0 $n1
+		    
 		    # n2 has file type:
 		    switch $n2 {
 			11 {
@@ -93,11 +104,12 @@ proc open_file_window {w fn} {
 			}
 			
 		    }
-		    set hexval [format "%04X %d %01X %01X %d %01X %01X%01X  %s "  $v $s $n1 $n2 $pa $st $n2 $n1 $filetype] 
+		    set filenumber [format "%X%X%X" $fn0 $fn1 $fn2]
+		    set hexval [format "%04X %d %01X %01X %d %01X %01X%01X  %s File:%s"  $v $s $n1 $n2 $pa $st $n2 $n1 $filetype $filenumber] 
 		}
 
 		default {
-		    set hexval [format "%04X %d %01X %01X %d %01X %01X%01X  %s "  $v $s $n1 $n2 $pa $st $n2 $n1 $kw] 
+		    set hexval [format "%04X %d %01X %01X %d %01X %01X%01X  %s"  $v $s $n1 $n2 $pa $st $n2 $n1 $kw] 
 		}
 	    }
 	    
