@@ -27,11 +27,13 @@
 #define WRAP_WORD_BUFFER           0
 #define DISABLE_MONITOR_DURING_RX  0
 #define STAT_OP                    0
-#define STAT_CE                    0
+#define STAT_CE                    1
 #define STAT_SP                    1
 #define STAT_BITS_0                0
+#define SHIFT_TX_DATA              0
+#define TX_CHANGE_RISING_EDGE      0   // TX data changes on rising edge of SP
 
-#define HEADER_LENGTH            -200
+#define HEADER_LENGTH            -128
 #define HEADER_WORD              0xffff
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -40,6 +42,15 @@
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Macro to set up the first data bit (has to be done on previous clock edge
+// before sending the data
+
+#if TX_CHANGE_RISING_EDGE
+#define SET_DATA_BIT0  if( (isr_send_data & 1) ) digitalWrite(D3Pin, LOW)
+#else
+#define SET_DATA_BIT0  ;
+#endif
 
 // reverses a byte or nibble
 int reverse(int x, int n)
@@ -144,7 +155,8 @@ enum
     IP_STOP         = 0x3E,
 
     // Special stimulii
-    IP_SEND_DONE    = 0x205D,
+    //.    IP_SEND_DONE2   = 0x205D,
+    //IP_SEND_DONE    = 0x40BA,
   };
 
 
@@ -159,8 +171,10 @@ volatile int isr_send_data = 0;
 volatile int isr_send_data_save = 0;
 volatile int isr_send_bits_save = 0;
 volatile boolean isr_send_flag = false;
+volatile boolean isr_send_done = false;
 volatile int isr_current_op = 0;
 volatile int ce_isr_state = CIS_IDLE;
+volatile int num_header_words = 0;
 
 // The serial monitor cannot run while we are capturing data as
 // I think it disables interrupts. This causes problems for our
@@ -238,7 +252,7 @@ volatile int copied_word_bits = 0;
 
 volatile int new_word = 0;
 
-#define BUF_LEN 1000
+#define BUF_LEN 1100
 
 volatile int buf_in = 0;
 volatile uint8_t state_buffer[BUF_LEN];
@@ -354,7 +368,11 @@ void cmd_display(String cmd)
   Serial.print("  Word out:");
   Serial.print(data_word_out_index);
   Serial.print("  TX out:");
-  Serial.print(data_word_tx_index);
+  Serial.println(data_word_tx_index);
+  Serial.print(" State:");
+  Serial.print(ce_isr_state);
+  Serial.print(" NumHdr:");
+  Serial.print(num_header_words);
   Serial.print("  Num data words:");
   Serial.print(num_data_words);
 
@@ -386,10 +404,23 @@ void cmd_display(String cmd)
 
 void cmd_clear(String cmd)
 {
+  int i;
+  
   buf_in = 0;
   num_data_words = 0;
-
+  num_header_words = 0;
+  
+  for(i=0; i<NUM_DATA_WORDS; i++)
+    {
+      data_words[i] = HEADER_WORD;
+    }
+  
   data_word_in_index = 0;
+}
+
+void cmd_reset_trace(String cmd)
+{
+  buf_in = 0;
 }
 
 
@@ -643,7 +674,7 @@ void cmd_writefile(String cmd)
   core_writefile(false);
 }
 
-const int NUM_CMDS = 15;
+const int NUM_CMDS = 16;
 
 String cmd;
 struct
@@ -654,6 +685,7 @@ struct
   {
     {"m",           cmd_modify},
     {"c",           cmd_clear},
+    {"rt",           cmd_reset_trace},
     {"d",           cmd_display},
     {"next",        cmd_next},
     {"prev",        cmd_prev},
@@ -1599,8 +1631,11 @@ void start_of_packet()
   // Record current OP state so we can detect changes
   isr_current_op = op;
 
+  // Not sending data
+  //  isr_send_flag = false;
+  
 #if TRACE_TAGS
-  buffer_point(0x1055, 0, 0);
+  buffer_point(0x1055, 0);
 #endif
 }
 
@@ -1616,18 +1651,22 @@ void start_of_packet()
 void end_of_packet()
 {
 #if TRACE_TAGS
-  buffer_point(0x10E0, ce_isr_state, captured_word);
+  buffer_point(0x10E0, captured_word);
 #endif
 
   // End of packet means data input, so set output HIGH
-  digitalWrite(D3Pin, HIGH);
-
+  // Unless we are sending data
+  if( !isr_send_flag )
+    {
+      digitalWrite(D3Pin, HIGH);
+    }
+  
 #if DROP_ZERO_BIT_PACKETS
   // Ignore zero bit packets
   if( word_bits == 0 )
     {
 #if TRACE_TAGS
-      buffer_point(0x10E1, 0x1919, 0x1919);
+      buffer_point(0x10E1, 0x1919);
 #endif
       return;
     }
@@ -1638,7 +1677,7 @@ void end_of_packet()
 
   new_word = 1;
 
-  if( captured_word == IP_SEND_DONE )
+  if( isr_send_done )
     {
       buffer_point(isr_send_data_save, word_bits);
     }
@@ -1690,7 +1729,7 @@ void end_of_packet()
 	  monitor_enabled = false;
 	  
 	  ce_isr_state = CIS_RX_WAIT;
-	  buf_in = 0;
+	  //	  buf_in = 0;
 	  num_data_words = 0;
 	  data_word_in_index = 0;
 	  
@@ -1701,6 +1740,7 @@ void end_of_packet()
 	  isr_send_bits = 1;
 	  isr_send_bits_save = 1;
 	  isr_send_flag = true;
+	  SET_DATA_BIT0;
 	  break;
 	}
       break;
@@ -1708,18 +1748,34 @@ void end_of_packet()
       // We've sent the bit for the WAIT command, wait for it
       // to go and then back to idle
     case CIS_RX_WAIT:
-      switch(captured_word)
+      if( isr_send_done )
 	{
-	case IP_SEND_DONE:
+	  isr_send_done = false;
+
 	  // We have sent data, now continue
 	  captured_word = 0;
 	  ce_isr_state = CIS_IDLE;
 	  //ce_isr_state = CIS_WAIT_2;
-	  break;
+	}
+      
+      switch(captured_word)
+	{
 
 	case IP_STOP:
 	  ce_isr_state = CIS_IDLE;
 	  break;
+
+	  // This is due to a bad word at start of load path
+	case IP_OPEN_RD:
+	  // We start the tx index negative as that indicates header words.
+	  // only once the index goes positive (or 0) does the code send
+	  // data words form the data words array
+	  
+	  data_word_tx_index = HEADER_LENGTH;
+	  
+	  ce_isr_state = CIS_RD_1;
+	  break;
+
 	}
       break;
 
@@ -1740,7 +1796,7 @@ void end_of_packet()
 	  isr_send_data_save = isr_send_data;
 	  isr_send_bits_save = isr_send_bits;
 	  isr_send_flag = true;
-
+	  SET_DATA_BIT0;
 	  ce_isr_state = CIS_WAIT_3;
 	  break;
 #if 1
@@ -1784,7 +1840,7 @@ void end_of_packet()
 	  isr_send_data_save = isr_send_data;
 	  isr_send_bits_save = isr_send_bits;
 	  isr_send_flag = true;
-
+	  SET_DATA_BIT0;
 	  ce_isr_state = CIS_RD_STAT;
 	  break;
 #if 1
@@ -1806,13 +1862,10 @@ void end_of_packet()
       break;
 
     case CIS_WAIT_3:
-      switch(captured_word)
+      if( isr_send_done )
 	{
-	case IP_STOP:
-	  ce_isr_state = CIS_IDLE;
-	  break;
+	  isr_send_done = false;
 
-	case IP_SEND_DONE:
 	  // Status sent so now we wait for the transfer command
 	  captured_word = 0;
 #if 0
@@ -1821,6 +1874,12 @@ void end_of_packet()
 #endif
 	  ce_isr_state = CIS_WAIT_TRANS;
 
+	}
+
+      switch(captured_word)
+	{
+	case IP_STOP:
+	  ce_isr_state = CIS_IDLE;
 	  break;
 	}
       break;
@@ -1833,13 +1892,8 @@ void end_of_packet()
       // We could have a coded form of file number selection using a specific
       // number in a specific memory or something, but we'll do that later
     case CIS_RD_STAT:
-      switch(captured_word)
+      if( isr_send_done )
 	{
-	case IP_STOP:
-	  ce_isr_state = CIS_IDLE;
-	  break;
-
-	case IP_SEND_DONE:
 	  // Status sent so now we wait for the transfer command
 	  captured_word = 0;
 #if 0
@@ -1848,8 +1902,14 @@ void end_of_packet()
 #endif
 	  //	  ce_isr_state = CIS_WAIT_TRANS;
 	  ce_isr_state = CIS_RD_WAIT_TRANS;
+	}
 
+      switch(captured_word)
+	{
+	case IP_STOP:
+	  ce_isr_state = CIS_IDLE;
 	  break;
+
 	}
       break;
       
@@ -1868,7 +1928,7 @@ void end_of_packet()
 	  isr_send_data_save = isr_send_data;
 	  isr_send_bits_save = isr_send_bits;
 	  isr_send_flag = true;
-
+	  SET_DATA_BIT0;
 	  ce_isr_state = CIS_WAIT_3;
 	  break;
 #if 1
@@ -1896,7 +1956,7 @@ void end_of_packet()
 	  isr_send_data_save = isr_send_data;
 	  isr_send_bits_save = isr_send_bits;
 	  isr_send_flag = true;
-
+	  SET_DATA_BIT0;
 	  //ce_isr_state = CIS_WAIT_3;
 	  ce_isr_state = CIS_RD_1;
 	  break;
@@ -1921,9 +1981,15 @@ void end_of_packet()
 	    {
 	      isr_send_data = reverse(data_words[data_word_tx_index++], 16);
 
+#if SHIFT_TX_DATA
 	      // Data is shifted 4 bits
 	      isr_send_data <<= 4;
 	      isr_send_data |= 0xf;
+	      isr_send_data &= 0x1fff;
+	      isr_send_data |= 0x6000;
+#else
+	      //isr_send_data |= 0xf000;
+#endif
 	      if( data_word_tx_index > (NUM_DATA_WORDS - 1) )
 		{
 		  data_word_tx_index = (NUM_DATA_WORDS -1);
@@ -1932,7 +1998,7 @@ void end_of_packet()
 	  isr_send_data_save = isr_send_data;
 	  isr_send_bits_save = isr_send_bits;
 	  isr_send_flag = true;
-
+	  SET_DATA_BIT0;
 	  ce_isr_state = CIS_RD_SENDING;
 #endif
 	  break;
@@ -1940,14 +2006,16 @@ void end_of_packet()
       break;
 
     case CIS_RD_SENDING:
-      switch(captured_word)
+      if( isr_send_done )
 	{
-	case IP_SEND_DONE:
 	  // We have sent data, now go back and see if more should be sent
 	  captured_word = 0;
 	  ce_isr_state = CIS_RD_1;
 	  //ce_isr_state = CIS_WAIT_2;
-	  break;
+	}
+
+      switch(captured_word)
+	{
 
 	case IP_STOP:
 	  ce_isr_state = CIS_IDLE;
@@ -1962,16 +2030,19 @@ void end_of_packet()
 	  // 16 bits of data
 	  
 	  // If data is all 1s then it is header data
-	  num_data_words++;
+
 	  
 	  if( (captured_word & 0xFFF0) == 0xFFF0 )
 	    {
 	      // Header word, ignore it
 	      // Back for more data
+	      num_header_words++;
 	      ce_isr_state = CIS_WAIT_2;
 	    }
 	  else
 	    {
+	      num_data_words++;
+	      
 	      // Store this data
 	      data_words[data_word_in_index++] = captured_word;
 #if WRAP_WORD_BUFFER
@@ -2000,7 +2071,7 @@ void end_of_packet()
 	  isr_send_data_save = isr_send_data;
 	  isr_send_bits_save = isr_send_bits;
 	  isr_send_flag = true;
-
+	  SET_DATA_BIT0;
 	  ce_isr_state = CIS_WAIT_TRANS;
 	  break;
 	}
@@ -2020,7 +2091,7 @@ void end_of_packet()
 	  isr_send_data_save = isr_send_data;
 	  isr_send_bits_save = isr_send_bits;
 	  isr_send_flag = true;
-
+	  SET_DATA_BIT0;
 	  break;
 	}
       break;
@@ -2039,7 +2110,7 @@ void end_of_packet()
     }
 
 #if TRACE_TAGS
-  buffer_point(0x10E1, 0, 0);
+  buffer_point(0x10E1, 0);
 #endif
 }
 
@@ -2059,7 +2130,7 @@ void spISR()
 #endif
   
 #if TRACE_CLOCKS  
-  buffer_point(0x10C1, sp, sp);
+  buffer_point(0x10C1, sp);
 #endif
   
   // If ce is not asserted then we just exit, we ignore
@@ -2077,12 +2148,19 @@ void spISR()
     {
       
 #if TRACE_TAGS
-      buffer_point(0x105E, isr_send_bits, isr_send_data);
+      buffer_point(0x105E, isr_send_data);
 #endif
       
       // We are required to send bits
-      if( sp )
-	{
+      // Data seems to change on a different edge when sending the 16 bit
+      // data to the 502p
+      
+#if TX_CHANGE_RISING_EDGE      
+      if( !sp )
+#else
+	if(sp)
+#endif	
+	  {
 	  // One more bit sent
 	  isr_send_bits--;
 	  isr_send_data >>= 1;
@@ -2094,14 +2172,14 @@ void spISR()
 	      digitalWrite(D3Pin, HIGH);
 
 #if TRACE_TAGS
-	      buffer_point(0x1051, 0x111, 0x111);
+	      buffer_point(0x1051, 0x111);
 #endif
 	      
 	      // Turn send flag off
 	      isr_send_flag = false;
 
 	      // Send stimulus to FSM
-	      captured_word = IP_SEND_DONE;
+	      isr_send_done = true;
 	      word_bits = isr_send_bits_save;
 	    }
 	}
@@ -2122,7 +2200,7 @@ void spISR()
 	    }
 	  
 #if TRACE_TAGS
-	  buffer_point(0x1050, 0x0, 0x0);
+	  buffer_point(0x1050, 0x0);
 #endif
 	}
     }
@@ -2152,7 +2230,7 @@ void spISR()
       if( op != isr_current_op )
 	{
 #if TRACE_TAGS
-	  buffer_point(0x10BB, op, op);
+	  buffer_point(0x10BB, op);
 #endif
 	  
 	  // End of this packet
@@ -2191,7 +2269,7 @@ void ceISR()
 #endif
   
 #if TRACE_TAGS
-  buffer_point(0x10CE, ce, ce);
+  buffer_point(0x10CE, ce);
 #endif
   
   // One more rising CE
@@ -2202,6 +2280,7 @@ void ceISR()
   else
     {
       end_of_packet();
+      //      start_of_packet();   //????
     }
   
 #if STAT_CE
@@ -2224,7 +2303,7 @@ void opISR()
 #endif
   
 #if TRACE_TAGS
-  buffer_point(0x10CC, op, op);
+  buffer_point(0x10CC, op);
 #endif
   
   end_of_packet();

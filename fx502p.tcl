@@ -3,6 +3,36 @@
 # Script that processes the fx502p files that come from the SD card gadget
 #
 #
+9
+set ::KEYWORDS {
+      P0      P1     P2      P3      P4      P5      P6      P7      P8      P9     0     1      2      3    .    EXP
+    RND0    RND1     RND2   RND3   RND4    RND5    RND6    RND7    RND8   RND9    4     5      6      7    8    9
+    LBL0    LBL1     LBL2   LBL3   LBL4    LBL5    LBL6    LBL7    LBL8   LBL9  HLT     \"    20+    40+   60+   ?2F
+    GOTO0   GOTO1   GOTO2  GOTO3  GOTO4  GOTO5   GOTO6   GOTO7   GOTO8  GOTO9   xD   ?3B    ENG    DMS   LOG   LN
+    GSBP0   GSBP1   GSBP2  GSBP3  GSBP4  GSBP5   GSBP6   GSBP7   GSBP8  GSBP9  +/-    (      )    SIN   COS  TAN
+    X<>M00 X<>M01 X<>M02 X<>M03 X<>M04 X<>M05 X<>M06 X<>M07 X<>M08 X<>M09       *  /   +   -   =  EXE
+    Min00   Min01   Min02   Min03   Min04   Min05   Min06   Min07   Min08   Min09  ?6A DSZ X=0 X=F RND# PI 
+    MR00    MR01    MR02    MR03    MR04    MR05    MR06    MR07    MR08    MR09    
+    M-00    M-01    M-02    M-03    M-04    M-05    M-06    M-07    M-08    M-09    
+    M+00    M+01    M+02    M+03    M+04    M+05    M+06    M+07    M+08    M+09    
+    X<>M10  X<>M11  X<>M12  X<>M13  X<>M14  X<>M15  X<>M16  X<>M17  X<>M18  X<>M19  
+    Min10   Min11   Min12   Min13   Min14   Min15   Min16   Min17   Min18   Min19   
+    M-10    M-11    M-12    M-13    M-14    M-15    M-16    M-17    M-18    M-19    
+    M+10    M+11    M+12    M+13    M+14    M+15    M+16    M+17    M+18    M+19    
+    X<.MF   MinF    MRF     M-F     M+F     ?F5
+}
+
+# Bit reverses a number
+proc reverse {x n} {
+    set r 0
+
+    for {set i 0} {$i < $n} {incr i 1} {
+	set r [expr ($r << 1) | ($x & 1)]
+	set x [expr $x >> 1]
+    }
+    
+    return $r
+}
 
 proc open_file_window {w fn} {
     toplevel $w
@@ -23,11 +53,56 @@ proc open_file_window {w fn} {
     grid columnconfigure $w 0 -weight 1
 
     # Put the data in the window and decode it as we go along
+    set widx 0
+    
     foreach line [split $filetext "\n"] {
 	if { [string length $line] > 0 } {
 	    set v [expr 0x$line >> 4]
+
+	    # Decode the nibbles in the line
+	    set s  [expr ($v & 0x800) >> 11]
+	    set n1 [expr ($v & 0x780) >> 7]
+	    set n2 [expr ($v & 0x078) >> 3]
+	    set pa [expr ($v & 0x004) >> 2]
+	    set st [expr ($v & 0x003) >> 0]
+	    set n1 [reverse $n1 4]
+	    set n2 [reverse $n2 4]
+	    set st [reverse $st 2]
+
+	    set kw [lindex $::KEYWORDS [expr 0x$n2$n1]]
+
+	    switch $widx {
+		0 {
+		    incr widx 1
+		    set hexval [format "%04X %d %01X %01X %d %01X %01X%01X  %s "  $v $s $n1 $n2 $pa $st $n2 $n1 $kw] 
+		}
+
+		1 {
+		    incr widx 1
+
+		    # n2 has file type:
+		    switch $n2 {
+			11 {
+			    set filetype "Programs"
+			}
+			15 {
+			    set filetype "Memories"
+			}
+			default {
+			    set filetype "Unknown file type $n2"
+			}
+			
+		    }
+		    set hexval [format "%04X %d %01X %01X %d %01X %01X%01X  %s "  $v $s $n1 $n2 $pa $st $n2 $n1 $filetype] 
+		}
+
+		default {
+		    set hexval [format "%04X %d %01X %01X %d %01X %01X%01X  %s "  $v $s $n1 $n2 $pa $st $n2 $n1 $kw] 
+		}
+	    }
 	    
-	    $w.text insert end "$line\n"
+
+	    $w.text insert end "$hexval\n"
 	}
     }
 }
