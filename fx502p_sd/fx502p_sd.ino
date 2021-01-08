@@ -30,10 +30,10 @@
 #define STAT_CE                    1
 #define STAT_SP                    1
 #define STAT_BITS_0                0
-#define SHIFT_TX_DATA              0
-#define TX_CHANGE_RISING_EDGE      0   // TX data changes on rising edge of SP
+#define SHIFT_TX_DATA              1
+#define TX_CHANGE_RISING_EDGE      1   // TX data changes on rising edge of SP
 
-#define HEADER_LENGTH            -128
+#define HEADER_LENGTH            -160
 #define HEADER_WORD              0xffff
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -167,7 +167,7 @@ const int button3Pin = PC15;
 
 volatile int in_byte = 0;
 volatile int isr_send_bits = 0;
-volatile int isr_send_data = 0;
+volatile unsigned int isr_send_data = 0;
 volatile int isr_send_data_save = 0;
 volatile int isr_send_bits_save = 0;
 volatile boolean isr_send_flag = false;
@@ -469,17 +469,40 @@ void core_read(String arg, boolean oled_nserial)
 
   if (myFile)
     {
+#define MLI 10      
+      char line[MLI];
+      int li = 0;
+      char ch;
+      
       // Read from the file and store it in the buffer
-      bytecount = 0;
+      num_data_words = 0;
       
       while (myFile.available())
 	{
-	  stored_bytes[bytecount++] = myFile.read();
-	  if( bytecount >= MAX_BYTES )
+	  // Read characters until newline
+	  ch = myFile.read();
+
+	  if( ch == '\n' )
 	    {
-	      bytecount = MAX_BYTES;
+	      line[li++] = '\0';
+	      Serial.println(line);
+	      sscanf(line, "%X", &(data_words[num_data_words++]));
+	      li = 0;
+	    }
+	  else
+	    {
+	      line[li++] = ch;
+	      if( li > MLI )
+		{
+		  li = MLI;
+		}
 	    }
 	  
+
+	  if( num_data_words >= NUM_DATA_WORDS )
+	    {
+	      num_data_words = NUM_DATA_WORDS;
+	    }
 	}
       
       // close the file:
@@ -487,7 +510,7 @@ void core_read(String arg, boolean oled_nserial)
 
       if ( oled_nserial )
 	{
-	  display.print(bytecount);
+	  display.print(num_data_words);
 	  display.println(" bytes read");
 	  display.display();
 	  delay(3000);
@@ -1496,6 +1519,9 @@ void setup() {
   //  attachInterrupt(digitalPinToInterrupt(OPPin), opISR,  CHANGE);
     
   //  attachInterrupt(digitalPinToInterrupt(SIOTXDPin), highISR, RISING);
+
+  // Read a file in for testing
+  core_read("FILE123.DAT", true);
 }
 
 
@@ -1849,8 +1875,8 @@ void end_of_packet()
 	  if( word_bits == 6 )
 	    {
 	      cis_flag_event = true;
-	      cis_event = "File:";
-	      cis_flag_event_read_file = true;
+	      cis_event = "Sent:";
+	      //cis_flag_event_read_file = true;
 	      
 	      ce_isr_state = CIS_IDLE;
 	      monitor_enabled = true;
@@ -1980,13 +2006,12 @@ void end_of_packet()
 	  else
 	    {
 	      isr_send_data = reverse(data_words[data_word_tx_index++], 16);
+	      //isr_send_data = data_words[data_word_tx_index++];
 
 #if SHIFT_TX_DATA
 	      // Data is shifted 4 bits
 	      isr_send_data <<= 4;
-	      isr_send_data |= 0xf;
-	      isr_send_data &= 0x1fff;
-	      isr_send_data |= 0x6000;
+	      isr_send_data |= 0x7;
 #else
 	      //isr_send_data |= 0xf000;
 #endif
@@ -1998,6 +2023,9 @@ void end_of_packet()
 	  isr_send_data_save = isr_send_data;
 	  isr_send_bits_save = isr_send_bits;
 	  isr_send_flag = true;
+
+	  // We need to drive the GPIO line, pull up is not enough
+	  pinMode(D3Pin, OUTPUT);
 	  SET_DATA_BIT0;
 	  ce_isr_state = CIS_RD_SENDING;
 #endif
@@ -2168,8 +2196,6 @@ void spISR()
 	  if( isr_send_bits == 0 )
 	    {
 	      // All done
-	      // Set as input again
-	      digitalWrite(D3Pin, HIGH);
 
 #if TRACE_TAGS
 	      buffer_point(0x1051, 0x111);
@@ -2181,6 +2207,10 @@ void spISR()
 	      // Send stimulus to FSM
 	      isr_send_done = true;
 	      word_bits = isr_send_bits_save;
+
+	      // Set as open drain again
+	      pinMode(D3Pin, OUTPUT_OPEN_DRAIN);	      
+	      digitalWrite(D3Pin, HIGH);
 	    }
 	}
       else
@@ -2196,7 +2226,8 @@ void spISR()
 	    }
 	  else
 	    {
-	      // Send a 0 (inverted to a 1) by doing nothing
+	      // Take line high
+	      digitalWrite(D3Pin, HIGH);
 	    }
 	  
 #if TRACE_TAGS
