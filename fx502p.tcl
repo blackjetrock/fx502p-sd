@@ -60,6 +60,8 @@ proc open_file_window {w fn} {
 
     # Put the data in the window and decode it as we go along
     set widx 0
+    set program_file 0
+    set memory_file 0
     
     foreach line [split $filetext "\n"] {
 	if { [string length $line] > 0 } {
@@ -95,9 +97,11 @@ proc open_file_window {w fn} {
 		    switch $n2 {
 			11 {
 			    set filetype "Programs"
+			    set program_file 1
 			}
 			15 {
 			    set filetype "Memories"
+			    set memory_file 1
 			}
 			default {
 			    set filetype "Unknown file type $n2"
@@ -109,7 +113,25 @@ proc open_file_window {w fn} {
 		}
 
 		default {
-		    set hexval [format "%04X %d %01X %01X %d %01X %01X%01X  %s"  $v $s $n1 $n2 $pa $st $n2 $n1 $kw] 
+		    if { $program_file } {
+			set hexval [format "%04X %d %01X %01X %d %01X %01X%01X  %s"  $v $s $n1 $n2 $pa $st $n2 $n1 $kw]
+		    }
+		    if { $memory_file } {
+			set mn [expr ($widx-2) / 8]
+			switch $mn {
+			    0 {
+				set mns "F"
+			    }
+			    default {
+				set mns [expr $mn - 1]
+			    }
+			    
+
+			}
+			
+			set hexval [format "%04X %d %01X %01X %d %01X %01X%01X %d %s"  $v $s $n1 $n2 $pa $st $n2 $n1 $mn $mns]
+		    }
+		    incr widx 1
 		}
 	    }
 	    
@@ -135,7 +157,7 @@ proc display_files {w width height} {
     grid rowconfigure    $w 0 -weight 1
     grid columnconfigure $w 0 -weight 1
 
-    set f [glob "FILE*.DAT"]
+    set f [glob "\{M,P\}*.DAT"]
 
     $w.text insert end "FX-502P Files\n"
     
