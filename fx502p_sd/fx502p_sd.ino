@@ -1394,7 +1394,8 @@ void setup() {
   // Make data line open drain output. We can read from it when set to
   // high as it is just a pull-up. Not having to call
   // pinMode saves us cycles
-  
+
+  digitalWrite(D3Pin, HIGH);
   pinMode(D3Pin, OUTPUT_OPEN_DRAIN);
   pinMode(PA0, INPUT);
   pinMode(PA1, INPUT);
