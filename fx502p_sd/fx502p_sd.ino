@@ -6,11 +6,24 @@
 // is a three digit number. When loading back the data words are sent
 // as they were received.
 //
+// The files are FILEtnnn.DAT
+//
+//    where nnn is the 3 digit file number
+//    and t is the type of the file:
+//         M for memories
+//         P for programs
+//
 // We leave the data line as an open drain
 // output, even when we want to use it as an input. This saves the
 // cycles needed to call pinMode(). Time is short when processing
-// the commands from the 502p
+// the commands from the 502p so all of the processing is done in
+// interrupt routines using nested switch FSMs
 //
+// The header has been cut down to the minimum that works (50 words)
+// and there's no delay when sending data words to or from the 502p.
+// This means loading and saving is faster than using the FA-1
+//
+// 
 
 #include <SPI.h>
 #include <SD.h>
@@ -24,7 +37,6 @@
 #define DROP_ZERO_BIT_PACKETS      1
 #define TRACE_CLOCKS               0
 #define TRACE_TAGS                 0
-#define WRAP_WORD_BUFFER           0
 #define DISABLE_MONITOR_DURING_RX  0
 #define STAT_OP                    0
 #define STAT_CE                    1
@@ -33,7 +45,7 @@
 #define SHIFT_TX_DATA              1
 #define TX_CHANGE_RISING_EDGE      1   // TX data changes on rising edge of SP
 
-#define HEADER_LENGTH            -160
+#define HEADER_LENGTH            -50
 #define HEADER_WORD              0xffff
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -102,6 +114,7 @@ boolean cis_flag_event_read_file = false;  // File data has been read
 
 // File number of data file
 char filenum[4] = "...";
+char filetype = 'X';
 
 int loopcnt = 0;
 volatile int captured_word = 0;
@@ -263,7 +276,7 @@ volatile int num_data_words = 0;
 // This is where data words appear
 #define NUM_DATA_WORDS  450
 
-volatile int data_word_in_index = 0;
+//volatile int data_word_in_index = 0;
 volatile int data_word_tx_index = 0;
 volatile int data_word_out_index = 0;
 
@@ -363,8 +376,8 @@ void cmd_display(String cmd)
   
   Serial.print("Buffer Count:");
   Serial.print(buf_in);
-  Serial.print("  Word in:");
-  Serial.print(data_word_in_index);
+  //  Serial.print("  Word in:");
+  //Serial.print(data_word_in_index);
   Serial.print("  Word out:");
   Serial.print(data_word_out_index);
   Serial.print("  TX out:");
@@ -415,7 +428,7 @@ void cmd_clear(String cmd)
       data_words[i] = HEADER_WORD;
     }
   
-  data_word_in_index = 0;
+  //  data_word_in_index = 0;
 }
 
 void cmd_reset_trace(String cmd)
@@ -517,7 +530,7 @@ void core_read(String arg, boolean oled_nserial)
 	}
       else
 	{
-	  Serial.print(bytecount);
+	  Serial.print(num_data_words);
 	  Serial.println(" bytes read.");
 	}
     }
@@ -603,10 +616,10 @@ void cmd_initsd(String cmd)
 
 void core_writefile(boolean oled_nserial)
 {
-  char filename[20] = "U___.txt";
+  char filename[20] = "nofile";
   int i;
 
-  sprintf(filename, "FILE%s.DAT", filenum);
+  sprintf(filename, "%c%s.DAT", filetype, filenum);
   
   if( oled_nserial )
     {
@@ -625,7 +638,7 @@ void core_writefile(boolean oled_nserial)
     {
       Serial.println("");
       Serial.print("Writing ");
-      Serial.print(bytecount);
+      Serial.print(num_data_words);
       Serial.print(" bytes to '");
       Serial.print(filename);
       Serial.print("'");
@@ -641,7 +654,7 @@ void core_writefile(boolean oled_nserial)
   if( myFile )
     {
       // Write data
-      for(i=0; i<data_word_in_index; i++)
+      for(i=0; i<num_data_words; i++)
 	{
 	  myFile.println(data_words[i], HEX);
 	}
@@ -651,13 +664,13 @@ void core_writefile(boolean oled_nserial)
       if( oled_nserial )
 	{
 	  display.setCursor(0,3*8);
-	  display.print(bytecount);
+	  display.print(num_data_words);
 	  display.println(" bytes written");
 	  display.display();
 	}
       else
 	{
-	  Serial.print(bytecount);
+	  Serial.print(num_data_words);
 	  Serial.println(" bytes written");
 	}
     }
@@ -1536,6 +1549,47 @@ void buffer_point(int captured_word, int word_bits)
     }
 }
 
+// Check he file we are about to write for meta commands
+//
+// If exponent is 47 then use first 3 digits as the current file
+// to load for memory LOAD commands
+// If exponent is 48 then use first 3 digits for the file number
+// of the file to load for program LOAD commands
+
+void meta_check()
+{
+  char fn[4] = "...";
+  char filename[20];
+  
+  // Is the exponent a special one?
+  if( (data_words[0] == 0x0030) &&
+      (data_words[1] == 0x07b0) &&
+      (data_words[2] == 0x7130) )
+    {
+      // Read file into memory read for a LOAD
+      fn[1] = (unsigned char)(((data_words[8] >> 7) & 0x0F)>>0);
+      fn[2] = (unsigned char)(((data_words[8] >> 7) & 0xF0)>>4);
+      fn[0] = (unsigned char)(((data_words[9] >> 7) & 0xF0)>>4);
+      fn[0] = reverse(fn[0], 4);
+      fn[1] = reverse(fn[1], 4);
+      fn[2] = reverse(fn[2], 4);
+      fn[0] += '0';
+      fn[1] += '0';
+      fn[2] += '0';
+      fn[3] = '\0';
+
+      sprintf(filename, "P%s.DAT", fn);
+      core_read(filename, true);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Check for meta information
+//
+// We need a way to specify which file should be sent on a LOAD
+// This is done using the inv SAVE inv EXE file. This saves the X register
+// We use the 
 int y = 32;
 
 void loop() {
@@ -1568,26 +1622,38 @@ void loop() {
       cis_flag_event = false;
 
       // Get file number from first two word
-#if 1
       filenum[1] = (unsigned char)(((data_words[0] >> 7) & 0x0F)>>0);
       filenum[2] = (unsigned char)(((data_words[0] >> 7) & 0xF0)>>4);
       filenum[0] = (unsigned char)(((data_words[1] >> 7) & 0xF0)>>4);
+      filetype   = (unsigned char)(((data_words[1] >> 7) & 0x0F)>>0);
       filenum[0] = reverse(filenum[0], 4);
       filenum[1] = reverse(filenum[1], 4);
       filenum[2] = reverse(filenum[2], 4);
+      filetype   = reverse(filetype, 4);
       filenum[0] += '0';
       filenum[1] += '0';
       filenum[2] += '0';
-      
       filenum[3] = '\0';
-#endif
+      switch(filetype)
+	{
+	case 11:
+	  filetype = 'P';
+	  break;
+	  
+	case 15:
+	  filetype = 'M';
+	  break;
+	}
 
       if( cis_flag_event_read_file )
 	{
-	  cis_flag_event_read_file = true;
+	  cis_flag_event_read_file = false;
 	  
 	  // Write data to a file
 	  core_writefile(true);
+
+	  // Check for meta information
+	  meta_check();
 	}
       
       display.fillRect(0, y, 128, 8, BLACK);
@@ -1724,10 +1790,11 @@ void end_of_packet()
       
       switch(captured_word)
 	{
+#if 0
 	case IP_RESET:
 	  ce_isr_state = CIS_502_PO_1;
 	  break;
-	      
+#endif	      
 	case IP_UNKA:
 	  ce_isr_state = CIS_RX_UNKNOWN_A;
 	  break;
@@ -1757,7 +1824,7 @@ void end_of_packet()
 	  ce_isr_state = CIS_RX_WAIT;
 	  //	  buf_in = 0;
 	  num_data_words = 0;
-	  data_word_in_index = 0;
+	  //	  data_word_in_index = 0;
 	  
 	  // We want to send a 0 bit on the next clock cycle,
 	  // set it up
@@ -1876,7 +1943,6 @@ void end_of_packet()
 	    {
 	      cis_flag_event = true;
 	      cis_event = "Sent:";
-	      //cis_flag_event_read_file = true;
 	      
 	      ce_isr_state = CIS_IDLE;
 	      monitor_enabled = true;
@@ -2069,18 +2135,14 @@ void end_of_packet()
 	    }
 	  else
 	    {
-	      num_data_words++;
-	      
 	      // Store this data
-	      data_words[data_word_in_index++] = captured_word;
-#if WRAP_WORD_BUFFER
-	      data_word_in_index = (data_word_in_index % NUM_DATA_WORDS);
-#else
-	      if( data_word_in_index >= (NUM_DATA_WORDS-10) )
+	      data_words[num_data_words++] = captured_word;
+
+	      if( num_data_words >= (NUM_DATA_WORDS-10) )
 		{
-		  data_word_in_index = NUM_DATA_WORDS - 10;
+		  num_data_words = NUM_DATA_WORDS - 10;
 		}
-#endif
+
 	      ce_isr_state = CIS_WAIT_2;
 	    }
 	}
