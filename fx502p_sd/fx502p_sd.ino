@@ -1581,6 +1581,26 @@ void meta_check()
       sprintf(filename, "P%s.DAT", fn);
       core_read(filename, true);
     }
+
+  if( (data_words[0] == 0x0030) &&
+      (data_words[1] == 0x07b0) &&
+      (data_words[2] == 0x0930) )
+    {
+      // Read file into memory read for a LOAD
+      fn[1] = (unsigned char)(((data_words[8] >> 7) & 0x0F)>>0);
+      fn[2] = (unsigned char)(((data_words[8] >> 7) & 0xF0)>>4);
+      fn[0] = (unsigned char)(((data_words[9] >> 7) & 0xF0)>>4);
+      fn[0] = reverse(fn[0], 4);
+      fn[1] = reverse(fn[1], 4);
+      fn[2] = reverse(fn[2], 4);
+      fn[0] += '0';
+      fn[1] += '0';
+      fn[2] += '0';
+      fn[3] = '\0';
+
+      sprintf(filename, "M%s.DAT", fn);
+      core_read(filename, true);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
