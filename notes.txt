@@ -1,0 +1,13 @@
+Extend inv save setting of file numbers beyond 999.
+
+x.yz E 47    Program file number xyz
+x.yz E 48    Data file number xyz
+
+This can be extended to
+
+abcdefxyz E 49 sets extended file number but still puts 3 digit number in data.
+
+Programs can't be chained but the external processor could execute it.
+
+Display can be used to decode memories and programs saved and display them
+Use display as a larger screen for results.
