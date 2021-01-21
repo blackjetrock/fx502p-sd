@@ -1550,12 +1550,16 @@ void buffer_point(int captured_word, int word_bits)
     }
 }
 
-// Check he file we are about to write for meta commands
+// Check the file we are about to write for meta commands
 //
 // If exponent is 47 then use first 3 digits as the current file
 // to load for memory LOAD commands
 // If exponent is 48 then use first 3 digits for the file number
 // of the file to load for program LOAD commands
+//
+// To allow more than 1000 file numbers we can have a 'bank' number
+// that is set up with a meta command
+//
 
 void meta_check()
 {
