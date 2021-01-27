@@ -82,6 +82,22 @@ int reverse(int x, int n)
   return(r);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// returns the correct parity bit for the word
+
+int correct_parity_of(int byte)
+{
+int i;
+int p = 0;
+
+ for(i=0; i< 8; i++)
+   {
+     p += ((byte & (1 << i)) >> i);
+   }
+
+ return( p % 2);
+}
+
 // set up variables using the SD utility library functions:
 Sd2Card card;
 SdVolume volume;
@@ -329,22 +345,31 @@ int indx = 0;
 void cmd_next(String cmd)
 {
   indx++;
+  
 }
 
 void cmd_prev(String cmd)
 {
   indx--;
 }
-
+		     
 void cmd_index(String cmd)
 {
   String arg;
+  int i;
+  char line[40];
   
   Serial.println("INDEX");
   arg = cmd.substring(1);
+  
   Serial.println(arg);
   
   indx = arg.toInt();
+  
+  int data = 0;
+  data    = (data_words[i] & 0x7F80) >> 7;
+  sprintf(line, "DATA: %02X: %02X", indx, data_words[i]);
+  Serial.println(line);
 }
 
 // Modify the buffer
@@ -357,7 +382,18 @@ void cmd_modify(String cmd)
 
   if( indx <= MAX_BYTES )
     {
-      stored_bytes[indx] = arg.toInt();
+      // Get new value
+      int data = arg.toInt();
+      int word = data_words[indx];
+
+      // Clear data bits
+      word &= 0x803F;
+      word |= data << 7;
+      data_words[indx] = word;
+
+      // New data byte inserted.
+      // We fix parity
+      data_words[indx] |= (correct_parity_of(data) << 6);
     }
 }
 
@@ -414,12 +450,71 @@ void cmd_display(String cmd)
 	}
     }
 
+
+  // These are the captured data words. We decode these to make the dump easier to read
+  int start = 0;
+  int stop = 0;
+  int parity = 0;
+  int xxx = 0;
+  int data = 0;
+  int word = 0;
+  
   for(i=0; i<NUM_DATA_WORDS; i++)
     {
-      sprintf(line, " %d %04X", i, data_words[i]);
+      sprintf(line, " %d %04X ", i, data_words[i]);
+      Serial.print(line);
+
+      // Decode to get the data bits
+      word    = data_words[i];
+      start   = (word & 0x8000) >> 16;
+      data    = (word & 0x7F80) >> 7;
+      parity  = (word & 0x0040) >> 6;
+      stop    = (word & 0x0030) >> 4;
+      xxx     = (word & 0x000F) >> 0;
+
+      sprintf(line, " %d %02X %d %01X %01X ", start, reverse(data,8), parity, stop, xxx);
       Serial.println(line);
+
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Fix the parity bits
+//
+//
+
+void cmd_fix_parity(String cmd)
+{
+  int i;
+  
+  int start = 0;
+  int stop = 0;
+  int parity = 0;
+  int xxx = 0;
+  int data = 0;
+  int word = 0;
+  char line[40];
+
+  for(i=0; i<NUM_DATA_WORDS; i++)
+    {
+      sprintf(line, " %d %04X ", i, data_words[i]);
+      Serial.print(line);
+
+      // Decode to get the data bits
+      word    = data_words[i];
+      start   = (word & 0x8000) >> 16;
+      data    = (word & 0x7F80) >> 7;
+      parity  = (word & 0x0040) >> 6;
+      stop    = (word & 0x0030) >> 4;
+      xxx     = (word & 0x000F) >> 0;
+
+      sprintf(line, " %d %02X %d=%d %01X %01X ", start, reverse(data,8), parity, correct_parity_of(data), stop, xxx);
+      Serial.println(line);
+
+    }
+}
+
 
 // Clear the buffer
 
@@ -726,12 +821,13 @@ struct
 {
   String cmdname;
   CMD_FPTR   handler;
-} cmdlist [NUM_CMDS] =
+} cmdlist [] =
   {
     {"m",           cmd_modify},
     {"c",           cmd_clear},
-    {"rt",           cmd_reset_trace},
+    {"rt",          cmd_reset_trace},
     {"d",           cmd_display},
+    {"parity",      cmd_fix_parity},
     {"next",        cmd_next},
     {"prev",        cmd_prev},
     {"i",           cmd_index},
@@ -756,7 +852,7 @@ void cmd_help(String cmd)
 {
   int i;
   
-  for(i=0; i<NUM_CMDS; i++)
+  for(i=0; cmdlist[i].handler != cmd_null; i++)
     {
       Serial.println(cmdlist[i].cmdname);
     }
