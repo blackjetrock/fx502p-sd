@@ -51,8 +51,10 @@
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
+
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
+//TwoWire Wire2(PB11,PB10);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Macro to set up the first data bit (has to be done on previous clock edge
@@ -1384,9 +1386,16 @@ void update_buttons()
 
   
 //HardwareSerial Serial1(PA10, PA9);
-HardwareSerial Serial2(PB11, PB10);
+//HardwareSerial Serial2(PB11, PB10);
+
 
 void setup() {
+
+
+  //  Wire2.begin();
+
+  Wire.setSDA(PB11);
+  Wire.setSCL(PB10);
 
   Wire.begin();
   pinMode(SPPin, INPUT);
@@ -1408,7 +1417,7 @@ void setup() {
   
   // put your setup code here, to run once:
   Serial.begin(2000000);
-  Serial2.begin(9600);
+  //  Serial2.begin(9600);
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c)) { // Address 0x3D for 128x64
@@ -1560,6 +1569,7 @@ void buffer_point(int captured_word, int word_bits)
 // To allow more than 1000 file numbers we can have a 'bank' number
 // that is set up with a meta command
 //
+// We can transform numbers into special characters
 
 void meta_check()
 {
