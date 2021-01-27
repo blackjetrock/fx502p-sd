@@ -37,7 +37,7 @@
 #define DROP_ZERO_BIT_PACKETS      1
 #define TRACE_CLOCKS               0
 #define TRACE_TAGS                 0
-#define DISABLE_MONITOR_DURING_RX  0
+#define DISABLE_MONITOR_DURING_RX  1
 #define STAT_OP                    0
 #define STAT_CE                    1
 #define STAT_SP                    1
