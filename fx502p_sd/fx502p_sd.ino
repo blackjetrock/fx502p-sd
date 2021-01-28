@@ -32,11 +32,16 @@
 #include <Adafruit_SSD1306.h>
 
 // Code configuration
+#define ENABLE_SERIAL              0
+#define ENABLE_OLED_SETUP          1
 #define DEBUG_SERIAL               0
 #define DIRECT_WRITE               0
 #define DROP_ZERO_BIT_PACKETS      1
-#define TRACE_CLOCKS               0
-#define TRACE_TAGS                 0
+#define TRACE_CLOCKS               1    // If code > 58K-ish and trace clocks off then
+                                        // save load doesn't work. No idea why
+                                        // If code size is <58K -ish then tracing clocks stops
+                                        // save/load working.
+#define TRACE_TAGS                 1
 #define DISABLE_MONITOR_DURING_RX  1
 #define STAT_OP                    0
 #define STAT_CE                    1
@@ -56,7 +61,7 @@
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
 //TwoWire Wire2(PB11,PB10);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
+ 
 // Macro to set up the first data bit (has to be done on previous clock edge
 // before sending the data
 
@@ -84,19 +89,20 @@ int reverse(int x, int n)
 
 ////////////////////////////////////////////////////////////////////////////////
 // returns the correct parity bit for the word
-
+#if 1
 int correct_parity_of(int byte)
 {
-int i;
-int p = 0;
+  int i;
+  int p = 0;
 
- for(i=0; i< 8; i++)
-   {
-     p += ((byte & (1 << i)) >> i);
-   }
+  for(i=0; i< 8; i++)
+    {
+      p += ((byte & (1 << i)) >> i);
+    }
 
- return( p % 2);
+  return( p % 2);
 }
+#endif
 
 // set up variables using the SD utility library functions:
 Sd2Card card;
@@ -160,6 +166,22 @@ enum
     
   };
 
+char *state_decode_list[] =
+  {
+    "CIS_IDLE",
+    "CIS_502_PO_1",
+    "CIS_RX_UNKNOWN_A",
+    "CIS_RX_WAIT",
+    "CIS_WAIT_2",
+    "CIS_WAIT_3",
+    "CIS_WAIT_TRANS",
+    "CIS_WAIT_DATA",
+    "CIS_RD_1",
+    "CIS_RD_STAT",
+    "CIS_RD_WAIT_TRANS",
+    "CIS_RD_SENDING",
+  };
+  
 // Commands
 enum
   {
@@ -283,7 +305,7 @@ volatile int copied_word_bits = 0;
 
 volatile int new_word = 0;
 
-#define BUF_LEN 1100
+#define BUF_LEN 5000
 
 volatile int buf_in = 0;
 volatile uint8_t state_buffer[BUF_LEN];
@@ -372,6 +394,7 @@ void cmd_index(String cmd)
   Serial.println(line);
 }
 
+#if 1
 // Modify the buffer
 void cmd_modify(String cmd)
 {
@@ -396,7 +419,7 @@ void cmd_modify(String cmd)
       data_words[indx] |= (correct_parity_of(data) << 6);
     }
 }
-
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -435,22 +458,100 @@ void cmd_display(String cmd)
   Serial.print(num_data_words);
 
   Serial.println("");
+
+  char tag_decode[40];
+  char state_decode[40];
+
+
   
   for(i=0; i<buf_in; i++)
     {
+      sprintf(state_decode, "%12s", state_decode_list[state_buffer[i]]);
       if( (word_buffer[i] & 0xff00) != 0x1000 )
 	{
-	  sprintf(line, " %02X (%d bits) S%d", word_buffer[i], blen_buffer[i], state_buffer[i]);
+	  sprintf(line, " %02X (%d bits) S%d(%s)", word_buffer[i], blen_buffer[i], state_buffer[i], state_decode);
 	  Serial.println(line);
 	}
       else
 	{
-	  sprintf(line, "T%04X %04X S%d", word_buffer[i], blen_buffer[i], state_buffer[i]);
+	  switch(word_buffer[i])
+	    {
+	      
+	    case 0x10CC:
+	      sprintf(tag_decode, "%19s%01X", "OP ISR::", blen_buffer[i]);
+	      break;
+
+	    case 0x10CE:
+	      sprintf(tag_decode, "%19s%01X", "CE ISR::", blen_buffer[i]);
+	      break;
+
+	    case 0x10BB:
+	      sprintf(tag_decode, "%19s%01X", "OP change:", blen_buffer[i]);
+	      break;
+
+	    case 0x105E:
+	      sprintf(tag_decode, "%16s%04X", "Send data:", blen_buffer[i]);
+	      break;
+	      
+	    case 0x10C1:
+	      sprintf(tag_decode, "%20s", "clk");
+	      break;
+
+	    case 0x10E0:
+	      sprintf(tag_decode, "%20s", "End of Packet");
+	      break;
+
+	    case 0x10E1:
+	      switch(blen_buffer[i])
+		{
+		case 0x1919:
+		  sprintf(tag_decode, "%20s", "Zero bit packet");
+		  break;
+		  
+		case 0:
+		  sprintf(tag_decode, "%20s", "End of packet");
+		  break;
+		}
+
+	      break;
+
+	      
+	    case 0x1050:
+	      switch(blen_buffer[i])
+		{
+		case 0x0:
+		  sprintf(tag_decode, "%20s", "Set Data Up");
+		  break;
+		}
+
+	      break;
+
+	    case 0x1051:
+	      switch(blen_buffer[i])
+		{
+		case 0x111:
+		  sprintf(tag_decode, "%20s", "Send All Done");
+		  break;
+		}
+
+	      break;
+
+	    case 0x1055:
+	      sprintf(tag_decode, "%20s", "Start of Packet");
+	      break;
+
+	    default:
+	      sprintf(tag_decode, "%20s", "???");
+	      break;
+	    }
+	  
+	  sprintf(line, "T%04X (%s) %04X S%d(%s)", word_buffer[i], tag_decode, blen_buffer[i], state_buffer[i], state_decode);
 	  Serial.println(line);
 	}
     }
 
 
+#if 1
   // These are the captured data words. We decode these to make the dump easier to read
   int start = 0;
   int stop = 0;
@@ -476,6 +577,7 @@ void cmd_display(String cmd)
       Serial.println(line);
 
     }
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -483,7 +585,7 @@ void cmd_display(String cmd)
 // Fix the parity bits
 //
 //
-
+#if 0
 void cmd_fix_parity(String cmd)
 {
   int i;
@@ -514,7 +616,7 @@ void cmd_fix_parity(String cmd)
 
     }
 }
-
+#endif
 
 // Clear the buffer
 
@@ -823,11 +925,15 @@ struct
   CMD_FPTR   handler;
 } cmdlist [] =
   {
+#if 0    
     {"m",           cmd_modify},
+#endif    
     {"c",           cmd_clear},
     {"rt",          cmd_reset_trace},
     {"d",           cmd_display},
+#if 0
     {"parity",      cmd_fix_parity},
+#endif
     {"next",        cmd_next},
     {"prev",        cmd_prev},
     {"i",           cmd_index},
@@ -851,8 +957,12 @@ void cmd_null(String cmd)
 void cmd_help(String cmd)
 {
   int i;
-  
+
+#if 0 
   for(i=0; cmdlist[i].handler != cmd_null; i++)
+#else
+    for(i=0; i<NUM_CMDS; i++)
+#endif
     {
       Serial.println(cmdlist[i].cmdname);
     }
@@ -1428,7 +1538,7 @@ void but_ev_select()
     }
 }
 
-
+#if 0
 void init_buttons()
 {
   Serial.println("Init buttons");
@@ -1486,7 +1596,7 @@ void update_buttons()
       buttons[i].last_pressed = buttons[i].pressed;
     }
 }
-
+#endif
   
 //HardwareSerial Serial1(PA10, PA9);
 //HardwareSerial Serial2(PB11, PB10);
@@ -1497,12 +1607,16 @@ void setup() {
 
   //  Wire2.begin();
 
+#if ENABLE_OLED_SETUP
   Wire.setSDA(PB11);
   Wire.setSCL(PB10);
 
+  
   Wire.begin();
+#endif
   pinMode(SPPin, INPUT);
 
+  
   // Make data line open drain output. We can read from it when set to
   // high as it is just a pull-up. Not having to call
   // pinMode saves us cycles
@@ -1518,8 +1632,11 @@ void setup() {
 
   //  digitalWrite(dataPin, LOW);
   
+
   // put your setup code here, to run once:
+#if ENABLE_SERIAL
   Serial.begin(2000000);
+#endif
   //  Serial2.begin(9600);
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
@@ -1637,7 +1754,7 @@ void setup() {
 #if 0
   to_home_menu(NULL);
 #endif
-  init_buttons();
+  //  init_buttons();
 
   // We want an interrupt on rising edge of clock
   attachInterrupt(digitalPinToInterrupt(SPPin), spISR,  CHANGE);
@@ -1647,7 +1764,7 @@ void setup() {
   //  attachInterrupt(digitalPinToInterrupt(SIOTXDPin), highISR, RISING);
 
   // Read a file in for testing
-  core_read("FILE123.DAT", true);
+  core_read("P123.DAT", true);
 }
 
 
@@ -1743,8 +1860,6 @@ void loop() {
     }
 #endif
   
-  //update_buttons();
-
 #if DISABLE_MONITOR_DURING_RX  
   if( monitor_enabled )
     {
@@ -2389,51 +2504,51 @@ void spISR()
 	if(sp)
 #endif	
 	  {
-	  // One more bit sent
-	  isr_send_bits--;
-	  isr_send_data >>= 1;
+	    // One more bit sent
+	    isr_send_bits--;
+	    isr_send_data >>= 1;
 	  
-	  if( isr_send_bits == 0 )
-	    {
-	      // All done
+	    if( isr_send_bits == 0 )
+	      {
+		// All done
 
 #if TRACE_TAGS
-	      buffer_point(0x1051, 0x111);
+		buffer_point(0x1051, 0x111);
 #endif
 	      
-	      // Turn send flag off
-	      isr_send_flag = false;
+		// Turn send flag off
+		isr_send_flag = false;
 
-	      // Send stimulus to FSM
-	      isr_send_done = true;
-	      word_bits = isr_send_bits_save;
+		// Send stimulus to FSM
+		isr_send_done = true;
+		word_bits = isr_send_bits_save;
 
-	      // Set as open drain again
-	      pinMode(D3Pin, OUTPUT_OPEN_DRAIN);	      
-	      digitalWrite(D3Pin, HIGH);
-	    }
-	}
-      else
-	{
-	  // falling edge
-	  // Set data up
-	  // Invert it
-	  if( (isr_send_data & 1) )
-	    {
-	      // Send a 1 (inverted logic) by writing a 0 and
-	      // driving open collector output
-	      digitalWrite(D3Pin, LOW);
-	    }
-	  else
-	    {
-	      // Take line high
-	      digitalWrite(D3Pin, HIGH);
-	    }
+		// Set as open drain again
+		pinMode(D3Pin, OUTPUT_OPEN_DRAIN);	      
+		digitalWrite(D3Pin, HIGH);
+	      }
+	  }
+	else
+	  {
+	    // falling edge
+	    // Set data up
+	    // Invert it
+	    if( (isr_send_data & 1) )
+	      {
+		// Send a 1 (inverted logic) by writing a 0 and
+		// driving open collector output
+		digitalWrite(D3Pin, LOW);
+	      }
+	    else
+	      {
+		// Take line high
+		digitalWrite(D3Pin, HIGH);
+	      }
 	  
 #if TRACE_TAGS
-	  buffer_point(0x1050, 0x0);
+	    buffer_point(0x1050, 0x0);
 #endif
-	}
+	  }
     }
   else
     {
@@ -2455,7 +2570,7 @@ void spISR()
 	  // If we are in send mode then we need to 
 	}
 
-            // Has OP changed?
+      // Has OP changed?
       // If so we end this packet, but only if ce is active
       
       if( op != isr_current_op )

@@ -1,0 +1,17 @@
+fx502p
+
+inv save inv exe
+
+CIS_IDLE
+  0C IP_WAIT -> RX_WAIT
+  Send 0 bit
+
+CIS_RX_WAIT
+Send done -> CIS_IDLE
+
+CIS_IDLE
+  IP_OPEN_WR ->CIS_WAIT_2
+
+CIS_WAIT_2
+  IP_READ_STATUS -> CIS_WAIT_3 and send bit 1
+
