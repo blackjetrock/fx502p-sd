@@ -32,8 +32,9 @@
 #include <Adafruit_SSD1306.h>
 
 // Code configuration
-
-#define LATER_OP_RD                1
+#define USE_HINT_LENGTH            0   // Sometimes we know how long the next packet is
+#define LATER_OP_RD                1   // Fixes the problem where the OP GPIO state isn't read correctly,
+                                       // so adds a delay before we read it.
 #define ENABLE_SERIAL              1
 #define ENABLE_OLED_SETUP          1
 #define DEBUG_SERIAL               0
@@ -2616,6 +2617,7 @@ void spISR()
       int op = ISOLATE_BIT(4, pb);
 #endif
 
+#if USE_HINT_LENGTH      
       // Do we have a hint as to the length of the packet
       // we are waiting for?
       end_packet_now = false;
@@ -2628,6 +2630,7 @@ void spISR()
 	      isr_hint_length = 0;
 	    }
 	}
+#endif
       
       // Has OP changed?
 
