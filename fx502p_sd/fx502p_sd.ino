@@ -829,12 +829,23 @@ void cmd_initsd(String cmd)
 // Deletes any file that exists with the same name so that the resulting
 // file is the same size as the buffer
 
-
+boolean led_state = true;
 void core_writefile(boolean oled_nserial)
 {
   char filename[20] = "nofile";
   int i;
 
+  if( led_state )
+    {
+      digitalWrite(LEDPin, HIGH);
+    }
+  else
+    {
+      digitalWrite(LEDPin, LOW);
+    }
+  
+  led_state = !led_state;
+  
   sprintf(filename, "%c%s.DAT", filetype, filenum);
   
   if( oled_nserial )
