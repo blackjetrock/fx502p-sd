@@ -32,7 +32,7 @@
 #include <Adafruit_SSD1306.h>
 
 // Code configuration
-#define ENABLE_SERIAL              0
+#define ENABLE_SERIAL              1
 #define ENABLE_OLED_SETUP          1
 #define DEBUG_SERIAL               0
 #define DIRECT_WRITE               0
@@ -228,6 +228,7 @@ volatile boolean isr_send_done = false;
 volatile int isr_current_op = 0;
 volatile int ce_isr_state = CIS_IDLE;
 volatile int num_header_words = 0;
+volatile int isr_hint_length = 0;
 
 // The serial monitor cannot run while we are capturing data as
 // I think it disables interrupts. This causes problems for our
@@ -532,6 +533,10 @@ void cmd_display(String cmd)
 		case 0x111:
 		  sprintf(tag_decode, "%20s", "Send All Done");
 		  break;
+		default:
+		  sprintf(tag_decode, "%20s", "Send All Done");
+		  
+		break;
 		}
 
 	      break;
@@ -2055,6 +2060,10 @@ void end_of_packet()
 	  // Start of a file being sent from the 502p
 	case IP_OPEN_WR:
 	  ce_isr_state = CIS_WAIT_2;
+
+	  // Provide the number of bits we are waiting for, as we know what the next
+	  // packet will be
+	  isr_hint_length = 6;
 	  break;
 
 	  // Start of a file being sent to the 502p
@@ -2065,6 +2074,10 @@ void end_of_packet()
 	  // data words form the data words array
 	  
 	  data_word_tx_index = HEADER_LENGTH;
+
+	  // Provide the number of bits we are waiting for, as we know what the next
+	  // packet will be
+	  isr_hint_length = 6;
 	  
 	  ce_isr_state = CIS_RD_1;
 	  break;
@@ -2357,6 +2370,10 @@ void end_of_packet()
 	{
 	  // We have sent data, now go back and see if more should be sent
 	  captured_word = 0;
+
+	  // We know the length of the next packet
+	  isr_hint_length = 6;
+	  
 	  ce_isr_state = CIS_RD_1;
 	  //ce_isr_state = CIS_WAIT_2;
 	}
@@ -2384,6 +2401,9 @@ void end_of_packet()
 	      // Header word, ignore it
 	      // Back for more data
 	      num_header_words++;
+
+	      // We know the length of the next packet
+	      isr_hint_length = 6;
 	      ce_isr_state = CIS_WAIT_2;
 	    }
 	  else
@@ -2396,6 +2416,8 @@ void end_of_packet()
 		  num_data_words = NUM_DATA_WORDS - 10;
 		}
 
+	      // We know the length of the next packet
+	      isr_hint_length = 6;
 	      ce_isr_state = CIS_WAIT_2;
 	    }
 	}
@@ -2467,7 +2489,8 @@ void spISR()
   int d =  ISOLATE_BIT(3, pb);
   int op = ISOLATE_BIT(4, pb);
   int ce = ISOLATE_BIT(13, pb);
-
+  boolean end_packet_now = false;
+  
 #if STAT_SP  
   digitalWrite(statPin, HIGH);
 #endif
@@ -2570,10 +2593,23 @@ void spISR()
 	  // If we are in send mode then we need to 
 	}
 
+      // Do we have a hint as to the length of the packet
+      // we are waiting for?
+      end_packet_now = false;
+      if( isr_hint_length != 0 )
+	{
+	  // yes, end the packet if the length matches
+	  if( word_bits == isr_hint_length )
+	    {
+	      end_packet_now = true;
+	      isr_hint_length = 0;
+	    }
+	}
+      
       // Has OP changed?
       // If so we end this packet, but only if ce is active
       
-      if( op != isr_current_op )
+      if( (op != isr_current_op) || end_packet_now )
 	{
 #if TRACE_TAGS
 	  buffer_point(0x10BB, op);
