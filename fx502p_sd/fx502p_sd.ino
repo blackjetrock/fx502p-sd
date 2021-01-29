@@ -32,6 +32,7 @@
 #include <Adafruit_SSD1306.h>
 
 // Code configuration
+#define LATER_OP_RD                1
 #define DEBUG_SERIAL               0
 #define DIRECT_WRITE               0
 #define DROP_ZERO_BIT_PACKETS      1
@@ -100,11 +101,13 @@ const int CEPin      = PB13;
 const int VCCPin     = PB14;
 const int CONTPin    = PB15;
 
+const int LEDPin     = PC3;
+
 #define ISOLATE_BIT(N,X) ((X & (1<< N)) >> N)
 
 // Debug outputs
-const int statPin   = PC13;
-const int dataPin   = PC14;
+const int statPin   = PC0;
+const int dataPin   = PC1;
 
 
 // FSM output flags
@@ -1400,6 +1403,11 @@ void setup() {
   Wire.begin();
   pinMode(SPPin, INPUT);
 
+
+  // Turn LED on
+  pinMode(LEDPin, OUTPUT);
+  digitalWrite(LEDPin, LOW);
+  
   // Make data line open drain output. We can read from it when set to
   // high as it is just a pull-up. Not having to call
   // pinMode saves us cycles
@@ -2244,11 +2252,14 @@ void end_of_packet()
 
 void spISR()
 {
-  int pb = GPIOB->IDR;
+  volatile int pb = GPIOB->IDR;
   int sp = ISOLATE_BIT(12, pb);
   int d =  ISOLATE_BIT(3, pb);
-  int op = ISOLATE_BIT(4, pb);
   int ce = ISOLATE_BIT(13, pb);
+#if !LATER_OP_RD
+      pb = GPIOB->IDR;
+      int op = ISOLATE_BIT(4, pb);
+#endif
 
 #if STAT_SP  
   digitalWrite(statPin, HIGH);
@@ -2352,7 +2363,14 @@ void spISR()
 	  // If we are in send mode then we need to 
 	}
 
-            // Has OP changed?
+      // Has OP changed?
+      // We read OP here to give us a delay from the SPISR to reading the GPIO
+      // If we do it too fast the GPIO state is wrong, when we use fast code,
+      // or larger code sizes. No idea why.
+#if LATER_OP_RD
+      pb = GPIOB->IDR;
+      int op = ISOLATE_BIT(4, pb);
+#endif
       // If so we end this packet, but only if ce is active
       
       if( op != isr_current_op )
