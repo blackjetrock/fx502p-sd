@@ -55,6 +55,8 @@
 
 #define HEADER_LENGTH            -50
 #define HEADER_WORD              0xffff
+#define MEMORY_LENGTH             8    // Number of bytes a memory uses
+#define NUM_MEMORIES             22
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -73,39 +75,6 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #else
 #define SET_DATA_BIT0  ;
 #endif
-
-// reverses a byte or nibble
-int reverse(int x, int n)
-{
-  int i;
-  int r = 0;
-  
-  for(i=0; i<n; i++)
-    {
-      r<<=1;
-      r+= (x & 1);
-      x>>=1;
-    }
-  
-  return(r);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// returns the correct parity bit for the word
-
-int correct_parity_of(int byte)
-{
-  int i;
-  int p = 0;
-
-  for(i=0; i< 8; i++)
-    {
-      p += ((byte & (1 << i)) >> i);
-    }
-
-  return( p % 2);
-}
-
 
 // set up variables using the SD utility library functions:
 Sd2Card card;
@@ -363,6 +332,50 @@ void but_ev_up();
 void but_ev_down();
 void but_ev_select();
 
+
+////////////////////////////////////////////////////////////////////////////////
+// reverses a byte or nibble
+int reverse(int x, int n)
+{
+  int i;
+  int r = 0;
+  
+  for(i=0; i<n; i++)
+    {
+      r<<=1;
+      r+= (x & 1);
+      x>>=1;
+    }
+  
+  return(r);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// returns the correct parity bit for the word
+
+int correct_parity_of(int byte)
+{
+  int i;
+  int p = 0;
+
+  for(i=0; i< 8; i++)
+    {
+      p += ((byte & (1 << i)) >> i);
+    }
+
+  return( p % 2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// get data byte from a data_words entry
+
+int get_data_words_byte(int i)
+{
+  return( reverse((data_words[i] & 0x7F80) >> 7, 8));
+}
+
+////////////////////////////////////////////////////////////////////////////////
 //
 // Allow interaction with serial monitor
 //
@@ -942,6 +955,191 @@ void cmd_port(String cmd)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+//
+// Decode and display the data words as memories
+//
+
+// returns a decoded memory of the form:
+// -1.23456789E-12
+//
+// as  string
+
+char decoded_memory[40];
+boolean upper_digit = true;
+int digit_i;
+
+// Initialises digit retrieval
+void start_next_digit(int data_words_i)
+{
+  digit_i = data_words_i;
+  upper_digit = false;
+}
+
+// get the next digit from a memory as  character
+char next_digit()
+{
+  int dv;
+  char dc;
+  
+  if( upper_digit )
+    {
+      dv = ((get_data_words_byte(digit_i) & 0xF0) >> 4);      
+      upper_digit = false;
+
+    }
+  else
+    {
+      dv = ((get_data_words_byte(digit_i) & 0x0F) >> 0);
+      upper_digit = true;
+      digit_i--;
+    }
+
+  switch(dv)
+    {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+      dc = dv + '0';
+      break;
+
+    case 10:
+      dc = 'o';
+      break;
+      
+    case 11:
+      dc = 'P';
+      break;
+      
+    case 12:
+      dc = 'C';
+      break;
+      
+    case 13:
+      dc = 'E';
+      break;
+      
+    case 14:
+      dc = '-';
+      break;
+      
+    case 15:
+      dc = ' ';
+      break;
+      
+    default:
+      dc = '?';
+      break;
+    }
+
+  return (dc);
+}
+
+char *decode_memory(int data_word_i)
+{
+  char memory_str[40];
+  int i;
+  int j;
+  int exponent;
+  char exp[5];
+  
+  memory_str[0] = ' ';
+  
+  start_next_digit(data_word_i);
+  for(j=1, i=data_word_i+13; i>=data_word_i; i--, j++)
+    {
+      memory_str[j] = next_digit();
+    }
+  
+  exponent  = ((get_data_words_byte(digit_i) & 0xF0) >> 4) * 10;
+  exponent += ((get_data_words_byte(digit_i) & 0x0F) >> 0) * 1;     
+
+  sprintf(exp, "E%02d", exponent);
+
+  memory_str[j] = '\0';
+
+  strcat(memory_str, exp);
+  
+  strcpy(decoded_memory, memory_str);
+  return(decoded_memory);  
+}
+
+// returns the name of memory N
+char m_name[5];
+
+char *memory_name(int i)
+{
+  if( i == 0 )
+    {
+      return("0F");
+    }
+
+  if( (i >= 1) && (i <=10) )
+    {
+      sprintf(m_name, "%02d", 9-(i-1));
+      return(m_name);
+    }
+
+  if( i == 11 )
+    {
+      return("1F");
+    }
+
+  if( (i >= 12) && (i <=21) )
+    {
+      sprintf(m_name, "%02d", 29-(i-2));
+      return(m_name);
+    }
+  
+  return("??");
+}
+
+
+// Decode the data words
+void cmd_disp_mem(String cmd)
+{
+  char line[40];
+  int a = ((get_data_words_byte(0) & 0x0F) >> 0);
+  int b = ((get_data_words_byte(0) & 0xF0) >> 4);
+  int c = ((get_data_words_byte(1) & 0x0F) >> 0);
+  int d = ((get_data_words_byte(1) & 0xF0) >> 4);
+  
+  int filenum = a + b*10 + c*100;
+  int filetype = d;
+  char *filetype_s;
+  
+  switch(filetype)
+    {
+    case 15:
+      filetype_s = "Memory";
+      break;
+    case 11:
+      filetype_s = "Program";
+      break;
+    default:
+      filetype_s = "Unknown";
+      break;
+    }
+  sprintf(line, "\nType:%s (%d) Number:%03d", filetype_s, filetype, filenum);
+  Serial.println(line);
+
+  int mem_num = 0;
+  
+  for(int i=2; i<2+22*8;i+=MEMORY_LENGTH)
+    {
+      sprintf(line, "%s: %s", memory_name((i-2)/MEMORY_LENGTH), decode_memory(i+7));
+      Serial.println(line);
+    }
+
+}
+
 void cmd_writefile(String cmd)
 {
   core_writefile(false);
@@ -956,6 +1154,7 @@ struct
   CMD_FPTR   handler;
 } cmdlist [] =
   {
+    {"mem",         cmd_disp_mem},
     {"m",           cmd_modify},
     {"c",           cmd_clear},
     {"rt",          cmd_reset_trace},
@@ -1022,6 +1221,7 @@ void run_monitor()
 	      if( test == cmdlist[i].cmdname )
 		{
 		  (*(cmdlist[i].handler))(cmd);
+		  break;
 		}
 	    }
 
