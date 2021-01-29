@@ -1044,27 +1044,50 @@ char next_digit()
 
 char *decode_memory(int data_word_i)
 {
-  char memory_str[40];
+  char memory_str[80];
   int i;
   int j;
   int exponent;
-  char exp[5];
+  char exp[80];
+  int s1, s2;
+  char mant_sgn;
+  char exp_sgn;
   
-  memory_str[0] = ' ';
-  
-  start_next_digit(data_word_i);
-  for(j=1, i=data_word_i+13; i>=data_word_i; i--, j++)
+  start_next_digit(data_word_i+7);
+  for(j=1, i=0; i<11; i++, j++)
     {
       memory_str[j] = next_digit();
     }
   
-  exponent  = ((get_data_words_byte(digit_i) & 0xF0) >> 4) * 10;
-  exponent += ((get_data_words_byte(digit_i) & 0x0F) >> 0) * 1;     
+  exponent  = ((get_data_words_byte(data_word_i) & 0xF0) >> 4) * 10;
+  exponent += ((get_data_words_byte(data_word_i) & 0x0F) >> 0) * 1;     
+  s1 = ((get_data_words_byte(data_word_i+1) & 0xF0) >> 4) * 1;
+  s2 = ((get_data_words_byte(data_word_i+1) & 0x0F) >> 0) * 1;     
 
-  sprintf(exp, "E%02d", exponent);
+  if( s2 & 8 )
+    {
+      mant_sgn = '-';
+    }
+  else
+    {
+      mant_sgn = ' ';
+    }
+
+  if( s2 & 1 )
+    {
+      exp_sgn = ' ';
+    }
+  else
+    {
+      exp_sgn = '-';
+      exponent = 100-exponent;
+    }
+
+  sprintf(exp, "E%c%02d", exp_sgn, exponent);
 
   memory_str[j] = '\0';
 
+  memory_str[0] = mant_sgn;
   strcat(memory_str, exp);
   
   strcpy(decoded_memory, memory_str);
@@ -1130,11 +1153,9 @@ void cmd_disp_mem(String cmd)
   sprintf(line, "\nType:%s (%d) Number:%03d", filetype_s, filetype, filenum);
   Serial.println(line);
 
-  int mem_num = 0;
-  
   for(int i=2; i<2+22*8;i+=MEMORY_LENGTH)
     {
-      sprintf(line, "%s: %s", memory_name((i-2)/MEMORY_LENGTH), decode_memory(i+7));
+      sprintf(line, "%s: %s", memory_name((i-2)/MEMORY_LENGTH), decode_memory(i));
       Serial.println(line);
     }
 
