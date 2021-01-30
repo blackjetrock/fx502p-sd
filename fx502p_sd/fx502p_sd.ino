@@ -186,6 +186,37 @@ enum
     //IP_SEND_DONE    = 0x40BA,
   };
 
+//--------------------------------------------------------------------------------
+//
+// Memory offsets into the data_words array
+
+#define MEM_OFF_M0F   2
+#define MEM_OFF_M09   (MEM_OFF_M0F+MEMORY_LENGTH)
+#define MEM_OFF_M08   (MEM_OFF_M09+MEMORY_LENGTH)
+#define MEM_OFF_M07   (MEM_OFF_M09+MEMORY_LENGTH)
+#define MEM_OFF_M06   (MEM_OFF_M07+MEMORY_LENGTH)
+#define MEM_OFF_M05   (MEM_OFF_M06+MEMORY_LENGTH)
+#define MEM_OFF_M04   (MEM_OFF_M05+MEMORY_LENGTH)
+#define MEM_OFF_M03   (MEM_OFF_M04+MEMORY_LENGTH)
+#define MEM_OFF_M02   (MEM_OFF_M03+MEMORY_LENGTH)
+#define MEM_OFF_M01   (MEM_OFF_M02+MEMORY_LENGTH)
+#define MEM_OFF_M00   (MEM_OFF_M01+MEMORY_LENGTH)
+
+// Offset into a menmory where the exponent byte is located
+#define MEM_OFF_EXPONENT  15
+#define MEM_OFF_D0        1
+#define MEM_OFF_D1        3
+#define MEM_OFF_D2        4
+#define MEM_OFF_D3        5
+#define MEM_OFF_D4        6
+#define MEM_OFF_D5        7
+#define MEM_OFF_D6        8
+#define MEM_OFF_D7        9
+#define MEM_OFF_D8        10
+#define MEM_OFF_D9        11
+#define MEM_OFF_D10       12
+
+//--------------------------------------------------------------------------------
 
 const int MAX_BYTES = 20;
 const int button1Pin = PA0;
@@ -321,6 +352,11 @@ volatile int bit_value = 0;
 // default to 9600
 //volatile int bit_period = 833;
 volatile int bit_period = 102;
+
+// We can prefix the filenumbers with this string to get more filenames
+char filename_bank[20] = "";
+
+boolean flag_mem_display = false;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -716,6 +752,7 @@ void core_read(String arg, boolean oled_nserial)
       Serial.print(arg);
       Serial.println("'");
     }
+
   
   myFile = SD.open(arg);
 
@@ -955,6 +992,7 @@ void cmd_port(String cmd)
     }
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Decode and display the data words as memories
@@ -1042,7 +1080,8 @@ char next_digit()
   return (dc);
 }
 
-char *decode_memory(int data_word_i)
+
+char *decode_memory(int data_word_i, boolean floating_point)
 {
   char memory_str[80];
   int i;
@@ -1052,6 +1091,7 @@ char *decode_memory(int data_word_i)
   int s1, s2;
   char mant_sgn;
   char exp_sgn;
+  int decimal_pos = 0;
   
   start_next_digit(data_word_i+7);
   for(j=1, i=0; i<11; i++, j++)
@@ -1064,6 +1104,15 @@ char *decode_memory(int data_word_i)
   s1 = ((get_data_words_byte(data_word_i+1) & 0xF0) >> 4) * 1;
   s2 = ((get_data_words_byte(data_word_i+1) & 0x0F) >> 0) * 1;     
 
+  if( floating_point )
+    {
+      decimal_pos = exponent;
+    }
+  else
+    {
+      decimal_pos = 0;
+    }
+  
   if( s2 & 8 )
     {
       mant_sgn = '-';
@@ -1089,8 +1138,12 @@ char *decode_memory(int data_word_i)
 
   memory_str[0] = mant_sgn;
   strcat(memory_str, exp);
-  
-  strcpy(decoded_memory, memory_str);
+
+  // Add in the decimal point
+  strncpy(decoded_memory, memory_str, decimal_pos+2);
+  decoded_memory[2] = '\0';
+  strcat(decoded_memory, ".");
+  strcat(decoded_memory, memory_str+2);
   return(decoded_memory);  
 }
 
@@ -1125,6 +1178,47 @@ char *memory_name(int i)
 }
 
 
+
+void display_memories()
+{
+  char line[40];
+  int a = ((get_data_words_byte(0) & 0x0F) >> 0);
+  int b = ((get_data_words_byte(0) & 0xF0) >> 4);
+  int c = ((get_data_words_byte(1) & 0x0F) >> 0);
+  int d = ((get_data_words_byte(1) & 0xF0) >> 4);
+  
+  int filenum = a + b*10 + c*100;
+  int filetype = d;
+  char *filetype_s;
+  
+  switch(filetype)
+    {
+    case 15:
+      filetype_s = "Memory";
+      break;
+    case 11:
+      filetype_s = "Program";
+      break;
+    default:
+      filetype_s = "Unknown";
+      break;
+    }
+
+  if( filetype == 15 )
+    {
+      display.clearDisplay();
+      display.setCursor(0,0);
+      
+      for(int i=2; i<2+8*8;i+=MEMORY_LENGTH)
+	{
+	  sprintf(line, "%s:%s", memory_name((i-2)/MEMORY_LENGTH), decode_memory(i, false));
+	  display.println(line);
+	}
+      
+      display.display();
+    }
+}
+
 // Decode the data words
 void cmd_disp_mem(String cmd)
 {
@@ -1155,7 +1249,7 @@ void cmd_disp_mem(String cmd)
 
   for(int i=2; i<2+22*8;i+=MEMORY_LENGTH)
     {
-      sprintf(line, "%s: %s", memory_name((i-2)/MEMORY_LENGTH), decode_memory(i));
+      sprintf(line, "%s: %s", memory_name((i-2)/MEMORY_LENGTH), decode_memory(i, false));
       Serial.println(line);
     }
 
@@ -2030,6 +2124,8 @@ void buffer_point(int captured_word, int word_bits)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+//
 // Check the file we are about to write for meta commands
 //
 // If exponent is 47 then use first 3 digits as the current file
@@ -2042,10 +2138,12 @@ void buffer_point(int captured_word, int word_bits)
 //
 // We can transform numbers into special characters
 
+#if 0
 void meta_check()
 {
   char fn[4] = "...";
   char filename[20];
+  char line[40];
   
   // Is the exponent a special one?
   if( (data_words[0] == 0x0030) &&
@@ -2065,6 +2163,7 @@ void meta_check()
       fn[3] = '\0';
 
       sprintf(filename, "P%s.DAT", fn);
+      
       core_read(filename, true);
     }
 
@@ -2084,10 +2183,72 @@ void meta_check()
       fn[2] += '0';
       fn[3] = '\0';
 
+      
       sprintf(filename, "M%s.DAT", fn);
+
+      sprintf(line, "Loading file'%s'", filename);
+      Serial.println(line);
       core_read(filename, true);
     }
 }
+
+#else
+void meta_check()
+{
+  char fn[4] = "...";
+  char filename[20];
+  char *M0F;
+  char line[40];
+  
+  // Get the F memory contents
+  M0F = decode_memory(MEM_OFF_M0F, false);
+
+  sprintf(line, "M0F contents:%s exp:(%s)", M0F, M0F+MEM_OFF_EXPONENT);
+  Serial.println(line);
+  
+  // exponent 47?
+  if( strncmp(M0F+MEM_OFF_EXPONENT, "40", 2)==0 )
+    {
+      // Set mem display flag to value of first digit
+      flag_mem_display = (*(M0F+MEM_OFF_D1)=='1')?true:false;
+      Serial.print("Memory display flag:");
+      Serial.println(flag_mem_display);
+    }
+
+  if( strncmp(M0F+MEM_OFF_EXPONENT, "47", 2)==0 )
+    {
+      // Build file name
+      sprintf(filename, "P%c%c%c.DAT", *(M0F+MEM_OFF_D0), *(M0F+MEM_OFF_D1), *(M0F+MEM_OFF_D2));
+      core_read(filename, true);
+    }
+
+  if( strncmp(M0F+MEM_OFF_EXPONENT, "48", 2)==0 )
+    {
+      // Build file name
+      sprintf(filename, "M%c%c%c.DAT", *(M0F+MEM_OFF_D0), *(M0F+MEM_OFF_D1), *(M0F+MEM_OFF_D2));
+      core_read(filename, true);
+    }
+
+  if( strncmp(M0F+MEM_OFF_EXPONENT, "49", 2)==0 )
+    {
+      // Build file name
+      sprintf(filename_bank, "%c%c%c%c", *(M0F+MEM_OFF_D0), *(M0F+MEM_OFF_D1), *(M0F+MEM_OFF_D2), *(M0F+MEM_OFF_D3));
+      sprintf(line, "Filename bank:%s", filename_bank);
+      Serial.println(line);
+      Serial.println("Bank");
+      
+#if 0      
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.println("Reading file ");
+      display.println(arg.c_str());
+      display.display();
+      delay(1000);
+#endif
+    }
+}
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -2158,20 +2319,29 @@ void loop() {
 
 	  // Check for meta information
 	  meta_check();
+
+	  if( flag_mem_display )
+	    {
+	      display_memories();
+	    }
 	}
-      
-      display.fillRect(0, y, 128, 8, BLACK);
-      display.setCursor(0,y);
-      y += 8;
-      if( y > 56 )
+
+      if( !flag_mem_display )
 	{
-	  y = 0;
+	  display.fillRect(0, y, 128, 8, BLACK);
+	  display.setCursor(0,y);
+	  y += 8;
+	  if( y > 56 )
+	    {
+	      y = 0;
+	    }
+	  
+	  display.print(cis_event);
+	  display.print (" '");
+	  display.print((char *) &(filenum[0]));
+	  display.print("'");
+	  display.display();
 	}
-      display.print(cis_event);
-      display.print (" '");
-      display.print((char *) &(filenum[0]));
-      display.print("'");
-      display.display();
     }
 
   if( new_word )
