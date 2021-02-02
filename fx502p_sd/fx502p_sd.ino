@@ -356,7 +356,21 @@ volatile int bit_period = 102;
 // We can prefix the filenumbers with this string to get more filenames
 char filename_bank[20] = "";
 
-boolean flag_mem_display = false;
+boolean flag_mem_display     = false;
+boolean flag_graphics        = false;
+boolean flag_graphics_clear  = false;
+boolean flag_status          = true;
+
+// Status display fields
+
+#define STATUS_FIELD_LEN 21
+char status_action[STATUS_FIELD_LEN];
+char status_filenum[STATUS_FIELD_LEN];
+char status_filename[STATUS_FIELD_LEN];
+char status_num_bytes[STATUS_FIELD_LEN];
+char status_status[STATUS_FIELD_LEN];
+char status_sd_stat[STATUS_FIELD_LEN];
+char status_error[STATUS_FIELD_LEN];
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -737,22 +751,14 @@ void cmd_deletefile(String cmd)
 
 void core_read(String arg, boolean oled_nserial)
 {
-  if( oled_nserial )
-    {
-      display.clearDisplay();
-      display.setCursor(0,0);
-      display.println("Reading file ");
-      display.println(arg.c_str());
-      display.display();
-      delay(1000);
-    }
-  else
-    {
-      Serial.print("Reading file '");
-      Serial.print(arg);
-      Serial.println("'");
-    }
+  // Update status display
 
+  strcpy(status_action, "Read");
+  sprintf(status_filenum, "%s", arg.c_str());
+  
+  Serial.print("Reading file '");
+  Serial.print(arg);
+  Serial.println("'");
   
   myFile = SD.open(arg);
 
@@ -797,34 +803,21 @@ void core_read(String arg, boolean oled_nserial)
       // close the file:
       myFile.close();
 
-      if ( oled_nserial )
-	{
-	  display.print(num_data_words);
-	  display.println(" bytes read");
-	  display.display();
-	  delay(3000);
-	}
-      else
-	{
-	  Serial.print(num_data_words);
-	  Serial.println(" bytes read.");
-	}
+      sprintf(status_num_bytes, "%d", num_data_words);
+      
+      Serial.print(num_data_words);
+      Serial.println(" bytes read.");
+      sprintf(status_status, "");
+      sprintf(status_error, "");
+      
     }
   else
     {
       // if the file didn't open, print an error:
-      if( oled_nserial )
-	{
-	  display.println("Error opening");
-	  display.println(arg.c_str());
-	  display.display();
-	  delay(2000);
-	}
-      else
-	{
-	  Serial.print("Error opening ");
-	  Serial.println(arg);
-	}
+      sprintf(status_error, "Error opening");
+      
+      Serial.print("Error opening ");
+      Serial.println(arg);
     }
 }
 
@@ -908,29 +901,16 @@ void core_writefile(boolean oled_nserial)
   
   sprintf(filename, "%c%s.DAT", filetype, filenum);
   
-  if( oled_nserial )
-    {
-      display.clearDisplay();
-      display.setCursor(0,0);
-      display.println("");
-      display.print("Writing ");
-      display.print(" ");
-      display.println();
-      display.print("'");
-      display.print(filename);
-      display.print("'");
-      display.display();
-    }
-  else
-    {
-      Serial.println("");
-      Serial.print("Writing ");
-      Serial.print(num_data_words);
-      Serial.print(" bytes to '");
-      Serial.print(filename);
-      Serial.print("'");
-      Serial.println("");
-    }
+  sprintf(status_action, "Write");
+  sprintf(status_filename, "%s", filename);
+
+  Serial.println("");
+  Serial.print("Writing ");
+  Serial.print(num_data_words);
+  Serial.print(" bytes to '");
+  Serial.print(filename);
+  Serial.print("'");
+  Serial.println("");
   
   // Delete so we have no extra data if the file is currently larger than the buffer
   SD.remove(filename);
@@ -947,37 +927,16 @@ void core_writefile(boolean oled_nserial)
 	}
       
       myFile.close();
-
-      if( oled_nserial )
-	{
-	  display.setCursor(0,3*8);
-	  display.print(num_data_words);
-	  display.println(" bytes written");
-	  display.display();
-	}
-      else
-	{
-	  Serial.print(num_data_words);
-	  Serial.println(" bytes written");
-	}
+      
+      sprintf(status_num_bytes, "%d", num_data_words);
+      
+      Serial.print(num_data_words);
+      Serial.println(" bytes written");
     }
   else
     {
-      if(oled_nserial)
-	{
-	  display.println("Could not open file");
-	  display.display();
-
-	}
-      else
-	{
-	  Serial.println("Could not open file");
-	}
-    }
-
-  if( oled_nserial )
-    {
-      delay(2000);
+      sprintf(status_error, "Could not open file");
+      Serial.println("Could not open file");
     }
 }
 
@@ -1177,6 +1136,45 @@ char *memory_name(int i)
   return("??");
 }
 
+////////////////////////////////////////////////////////////////////////////////
+//
+// Display pages
+//
+//
+
+void graphics_plot(int x, int y)
+{
+  display.drawRect(x, y, 1, 1, WHITE);
+  display.display();
+}
+
+
+void display_graphics()
+{
+  if( flag_graphics_clear )
+    {
+      flag_graphics_clear = false;
+      display.clearDisplay();
+      //      display.drawRect(0, 0, 127, 63, 1);
+      display.display();
+    }
+}
+
+void display_status()
+{
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.print(status_sd_stat);
+  display.print(" ");
+  display.print(status_status);
+  display.println();
+  display.println(status_error);
+  display.println(status_action);
+  display.println(status_filenum);
+  display.print("Bytes:");
+  display.println(status_num_bytes);
+  display.display();
+}
 
 
 void display_memories()
@@ -1371,14 +1369,6 @@ void button_all_inputs(MENU_ELEMENT *e)
 {
 
   Serial.print("Interface now all inputs");
-
-  display.setTextSize(1);      
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.println("Interface all inputs");
-  display.display();
-  delay(2000);
-
   draw_menu(current_menu, true);
 }
 
@@ -1387,12 +1377,6 @@ void button_clear(MENU_ELEMENT *e)
 {
   bytecount = -1;
 
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.println("Buffer Cleared");
-  display.display();
-  
-  delay(3000);
   draw_menu(current_menu, true);
 }
 
@@ -1400,7 +1384,7 @@ void button_write(MENU_ELEMENT *e)
 {
   core_writefile(true);
 
-  delay(3000);
+
   draw_menu(current_menu, true);
 }
 
@@ -1522,13 +1506,6 @@ void but_ev_file_select()
 {
   strcpy(current_file, listfiles[menu_selection].text);
   file_offset = 0;
-
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.println("Selected file");
-  display.print(current_file);
-  display.display();
-  delay(3000);
 
   menu_selection = 0;
   to_home_menu(NULL);
@@ -1985,10 +1962,11 @@ void setup() {
   //  Serial2.begin(9600);
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c)) { // Address 0x3D for 128x64
-    Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
-  }
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c))
+    { // Address 0x3D for 128x64
+      Serial.println(F("SSD1306 allocation failed"));
+      for(;;); // Don't proceed, loop forever
+    }
 
   Serial.println("");
   Serial.println("");
@@ -2004,6 +1982,7 @@ void setup() {
   display.setCursor(0,0);             // Start at top-left corner
   display.println(F("fx502p Gadget"));
   display.display();
+  delay(2000);
   
   Serial.print("\nInitializing SD card...");
 
@@ -2077,16 +2056,12 @@ void setup() {
   if (!SD.begin(chipSelect)) {
     //if (!card.init(SPI_HALF_SPEED, chipSelect)) {
     Serial.println("SD Card initialisation failed!");
-    display.println("SD Fail");
-    display.display();
-    //    delay(2000);
+    sprintf(status_sd_stat, "SD FAIL");
   }
   else
     {
       Serial.println("SD card initialised.");
-      display.println("SD OK");
-      display.display();
-      //delay(2000);
+      sprintf(status_sd_stat, "SD OK");
     }
 
 #endif
@@ -2110,6 +2085,9 @@ void setup() {
 
   // Read a file in for testing
   core_read("P123.DAT", true);
+
+  // Put display up
+  update_display();
 }
 
 
@@ -2121,6 +2099,29 @@ void buffer_point(int captured_word, int word_bits)
       blen_buffer[buf_in]  = word_bits;
       state_buffer[buf_in] = ce_isr_state;
       buf_in++;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Update the selected display
+//
+
+void update_display()
+{
+  if( flag_mem_display )
+    {
+      display_memories();
+    }
+
+  if( flag_graphics )
+    {
+      display_graphics();
+    }
+
+  if( flag_status )
+    {
+      display_status();
     }
 }
 
@@ -2138,61 +2139,6 @@ void buffer_point(int captured_word, int word_bits)
 //
 // We can transform numbers into special characters
 
-#if 0
-void meta_check()
-{
-  char fn[4] = "...";
-  char filename[20];
-  char line[40];
-  
-  // Is the exponent a special one?
-  if( (data_words[0] == 0x0030) &&
-      (data_words[1] == 0x07b0) &&
-      (data_words[2] == 0x7130) )
-    {
-      // Read file into memory read for a LOAD
-      fn[1] = (unsigned char)(((data_words[8] >> 7) & 0x0F)>>0);
-      fn[2] = (unsigned char)(((data_words[8] >> 7) & 0xF0)>>4);
-      fn[0] = (unsigned char)(((data_words[9] >> 7) & 0xF0)>>4);
-      fn[0] = reverse(fn[0], 4);
-      fn[1] = reverse(fn[1], 4);
-      fn[2] = reverse(fn[2], 4);
-      fn[0] += '0';
-      fn[1] += '0';
-      fn[2] += '0';
-      fn[3] = '\0';
-
-      sprintf(filename, "P%s.DAT", fn);
-      
-      core_read(filename, true);
-    }
-
-  if( (data_words[0] == 0x0030) &&
-      (data_words[1] == 0x07b0) &&
-      (data_words[2] == 0x0930) )
-    {
-      // Read file into memory read for a LOAD
-      fn[1] = (unsigned char)(((data_words[8] >> 7) & 0x0F)>>0);
-      fn[2] = (unsigned char)(((data_words[8] >> 7) & 0xF0)>>4);
-      fn[0] = (unsigned char)(((data_words[9] >> 7) & 0xF0)>>4);
-      fn[0] = reverse(fn[0], 4);
-      fn[1] = reverse(fn[1], 4);
-      fn[2] = reverse(fn[2], 4);
-      fn[0] += '0';
-      fn[1] += '0';
-      fn[2] += '0';
-      fn[3] = '\0';
-
-      
-      sprintf(filename, "M%s.DAT", fn);
-
-      sprintf(line, "Loading file'%s'", filename);
-      Serial.println(line);
-      core_read(filename, true);
-    }
-}
-
-#else
 void meta_check()
 {
   char fn[4] = "...";
@@ -2206,10 +2152,73 @@ void meta_check()
   sprintf(line, "M0F contents:%s exp:(%s)", M0F, M0F+MEM_OFF_EXPONENT);
   Serial.println(line);
   
-  // exponent 47?
+  // Check for special exponents. These give us 'pages' of data that can be used to
+  // turn thing son and off
+
+  // Display page
   if( strncmp(M0F+MEM_OFF_EXPONENT, "40", 2)==0 )
     {
+      
       // Set mem display flag to value of first digit
+      switch(*(M0F+MEM_OFF_D1))
+	{
+	case '1':
+	  flag_mem_display = false;
+	  flag_graphics = false;
+	  flag_status = true;
+	  break;
+
+	case '2':
+	  flag_mem_display = false;
+	  flag_graphics = true;
+	  flag_graphics_clear = true;
+	  flag_status = false;
+	  break;
+
+	case '3':
+	  flag_mem_display = true;
+	  flag_graphics = false;
+	  flag_status = false;
+	  break;
+
+	case '0':
+	default:
+	  flag_mem_display = false;
+	  flag_graphics = false;
+	  flag_status = false;
+	  break;
+	  
+	}
+      
+      Serial.print("Graphics flag:");
+      Serial.println(flag_graphics);
+    }
+
+  // Graphics command
+  if( strncmp(M0F+MEM_OFF_EXPONENT, "50", 2)==0 )
+    {
+      int x, y;
+      int d1, d2, d3, d4, d5, d6;
+      
+      d1 = (*(M0F+MEM_OFF_D1)) - '0';
+      d2 = (*(M0F+MEM_OFF_D2)) - '0';
+      d3 = (*(M0F+MEM_OFF_D3)) - '0';
+      d4 = (*(M0F+MEM_OFF_D4)) - '0';
+      d5 = (*(M0F+MEM_OFF_D5)) - '0';
+      d6 = (*(M0F+MEM_OFF_D6)) - '0';
+
+      x = d1*100+d2*10+d3;
+      y = d4*100+d5*10+d6;
+
+      graphics_plot(x,y);
+      
+      sprintf(line, "X,Y=%d,%d", x, y);
+      Serial.println(line);
+    }
+
+  if( strncmp(M0F+MEM_OFF_EXPONENT, "41", 2)==0 )
+    {
+      // Set up graphics display flag
       flag_mem_display = (*(M0F+MEM_OFF_D1)=='1')?true:false;
       Serial.print("Memory display flag:");
       Serial.println(flag_mem_display);
@@ -2237,18 +2246,11 @@ void meta_check()
       Serial.println(line);
       Serial.println("Bank");
       
-#if 0      
-      display.clearDisplay();
-      display.setCursor(0,0);
-      display.println("Reading file ");
-      display.println(arg.c_str());
-      display.display();
-      delay(1000);
-#endif
     }
+  
+  update_display();
 }
 
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -2320,27 +2322,26 @@ void loop() {
 	  // Check for meta information
 	  meta_check();
 
-	  if( flag_mem_display )
-	    {
-	      display_memories();
-	    }
+
 	}
 
       if( !flag_mem_display )
 	{
-	  display.fillRect(0, y, 128, 8, BLACK);
-	  display.setCursor(0,y);
+	  //	  display.fillRect(0, y, 128, 8, BLACK);
+	  //display.setCursor(0,y);
 	  y += 8;
 	  if( y > 56 )
 	    {
 	      y = 0;
 	    }
-	  
+
+#if 0	  
 	  display.print(cis_event);
 	  display.print (" '");
 	  display.print((char *) &(filenum[0]));
 	  display.print("'");
 	  display.display();
+#endif
 	}
     }
 
