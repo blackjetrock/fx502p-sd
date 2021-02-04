@@ -28,6 +28,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include <Wire.h>
+#include <SoftWire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
@@ -64,9 +65,17 @@
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
+
 //TwoWire Wire2(PB11,PB10);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
- 
+
+// Software I2C for the GPIO connector
+
+uint8_t sdaPin = PC7;
+uint8_t sclPin = PC6;
+
+SoftWire sw(sdaPin, sclPin);
+
 // Macro to set up the first data bit (has to be done on previous clock edge
 // before sending the data
 
@@ -116,7 +125,10 @@ char filetype = 'X';
 
 int loopcnt = 0;
 volatile int captured_word = 0;
-  
+volatile int other_word = 0;
+volatile int other_word_bits = 0;
+volatile boolean other_word_flag = false;
+
 File myFile;
 
 // Capture file
@@ -318,6 +330,11 @@ volatile uint8_t state_buffer[BUF_LEN];
 volatile int word_buffer[BUF_LEN];
 volatile uint8_t blen_buffer[BUF_LEN];
 volatile int num_data_words = 0;
+
+#define OBUF_LEN 100
+
+volatile int num_other_words = 0;
+volatile int other_data_words[OBUF_LEN];
 
 // This is where data words appear
 #define NUM_DATA_WORDS  320
@@ -902,8 +919,8 @@ void core_writefile(boolean oled_nserial)
   sprintf(filename, "%c%s.DAT", filetype, filenum);
   
   sprintf(status_action, "Write");
-  sprintf(status_filename, "%s", filename);
-
+  sprintf(status_filenum, "%s", filename);
+  
   Serial.println("");
   Serial.print("Writing ");
   Serial.print(num_data_words);
@@ -1217,6 +1234,113 @@ void display_memories()
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+//
+// Read the clock
+//
+//
+// Print with leading zero, as expected for time
+void printTwoDigit(int n)
+{
+  if (n < 10) {
+    Serial.print('0');
+  }
+  Serial.print(n);
+}
+
+#define I2C_ADDRESS 0x68
+#define NUM_BYTES    1
+
+void readTime(void)
+{
+  // Ensure register address is valid
+  sw.beginTransmission(I2C_ADDRESS);
+  sw.write(uint8_t(0)); // Access the first register
+  sw.endTransmission();
+
+  uint8_t registers[7]; // There are 7 registers we need to read from to get the date and time.
+  int numBytes = sw.requestFrom(I2C_ADDRESS, (uint8_t)NUM_BYTES);
+  
+  for (int i = 0; i < numBytes; ++i)
+    {
+      registers[i] = sw.read();
+    }
+  
+  if (numBytes != NUM_BYTES)
+    {
+      Serial.print("Read wrong number of bytes: ");
+      Serial.println((int)numBytes);
+      return;
+    }
+  
+  int tenYear = (registers[6] & 0xf0) >> 4;
+  int unitYear = registers[6] & 0x0f;
+  int year = (10 * tenYear) + unitYear;
+  
+  int tenMonth = (registers[5] & 0x10) >> 4;
+  int unitMonth = registers[5] & 0x0f;
+  int month = (10 * tenMonth) + unitMonth;
+  
+  int tenDateOfMonth = (registers[4] & 0x30) >> 4;
+  int unitDateOfMonth = registers[4] & 0x0f;
+  int dateOfMonth = (10 * tenDateOfMonth) + unitDateOfMonth;
+  
+  // Reading the hour is messy. See the datasheet for register details!
+  bool twelveHour = registers[2] & 0x40;
+  bool pm = false;
+  int unitHour;
+  int tenHour;
+  
+  if (twelveHour)
+    {
+      pm = registers[2] & 0x20;
+      tenHour = (registers[2] & 0x10) >> 4;
+    }
+  else
+    {
+      tenHour = (registers[2] & 0x30) >> 4;
+    }
+  
+  unitHour = registers[2] & 0x0f;
+  
+  int hour = (10 * tenHour) + unitHour;
+  if (twelveHour)
+    {
+      // 12h clock? Convert to 24h.
+      hour += 12;
+    }
+  
+  int tenMinute = (registers[1] & 0xf0) >> 4;
+  int unitMinute = registers[1] & 0x0f;
+  int minute = (10 * tenMinute) + unitMinute;
+  
+  int tenSecond = (registers[0] & 0xf0) >> 4;
+  int unitSecond = registers[0] & 0x0f;
+  int second = (10 * tenSecond) + unitSecond;
+  
+  // ISO8601 is the only sensible time format
+  Serial.print("Time: ");
+  Serial.print(year);
+  Serial.print('-');
+  printTwoDigit(month);
+  Serial.print('-');
+  printTwoDigit(dateOfMonth);
+  Serial.print('T');
+  printTwoDigit(hour);
+  Serial.print(':');
+  printTwoDigit(minute);
+  Serial.print(':');
+  printTwoDigit(second);
+  Serial.println();
+}
+
+void cmd_clk(String cmd)
+{
+  Serial.println("Clock");
+  readTime();
+}
+
+
 // Decode the data words
 void cmd_disp_mem(String cmd)
 {
@@ -1258,7 +1382,7 @@ void cmd_writefile(String cmd)
   core_writefile(false);
 }
 
-const int NUM_CMDS = 16;
+//const int NUM_CMDS = 16;
 
 String cmd;
 struct
@@ -1267,6 +1391,7 @@ struct
   CMD_FPTR   handler;
 } cmdlist [] =
   {
+    {"clk",         cmd_clk},
     {"mem",         cmd_disp_mem},
     {"m",           cmd_modify},
     {"c",           cmd_clear},
@@ -1284,6 +1409,7 @@ struct
     {"read",        cmd_readfile},
     {"delete",      cmd_deletefile},
     {"port",        cmd_port},
+
     {"-",           cmd_null},
   };
 
@@ -1323,7 +1449,7 @@ void run_monitor()
 	case '\r':
 	case '\n':
 	  // We have a command, process it
-	  for(i=0; i<NUM_CMDS; i++)
+	  for(i=0; cmdlist[i].handler != cmd_null; i++)
 	    {
 	      test = cmd.substring(0, (cmdlist[i].cmdname).length());
 	      if( cmdlist[i].cmdname == "-" )
@@ -1936,8 +2062,8 @@ void setup() {
   pinMode(SPPin, INPUT);
 
   // Turn LED on
-  pinMode(LEDPin, OUTPUT);
-  digitalWrite(LEDPin, LOW);
+  //pinMode(LEDPin, OUTPUT);
+  //digitalWrite(LEDPin, LOW);
   
   // Make data line open drain output. We can read from it when set to
   // high as it is just a pull-up. Not having to call
@@ -2284,6 +2410,19 @@ void loop() {
 #endif
   
 #if 1
+  if( other_word_flag )
+    {
+      other_word_flag = false;
+      Serial.print("OW:");
+      Serial.println(other_word);
+      
+      if( num_other_words < OBUF_LEN )
+	{
+	  other_data_words[num_other_words++] = other_word;
+	}
+      
+    }
+  
   if( cis_flag_event )
     {
       cis_flag_event = false;
@@ -2924,15 +3063,26 @@ void spISR()
 #endif
   
   // If ce is not asserted then we just exit, we ignore
-  // anything not for us
+  // anything not for us. We can capture these values, maybe, and do something with them?
+  
   if( !ce )
     {
+      if( sp )
+	{
+	  // One more rising SP, capture data
+	  other_word <<= 1;
+	  other_word += (1-d);
+	  other_word_bits++;
+	}
 #if STAT_SP      
       digitalWrite(statPin, LOW);
 #endif
       return;
     }
 
+  // ce is now high, so dump any words that weren't for us
+  other_word_flag = true;
+  
   // Do we have to send data for this clock?
   if( isr_send_flag )
     {
