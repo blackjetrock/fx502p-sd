@@ -4,4 +4,7 @@
 cassettefiles
 documents
 traces
+*.stl
+*.gcode
+*.step
 
