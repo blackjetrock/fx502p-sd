@@ -214,7 +214,7 @@ enum
 #define MEM_OFF_M01   (MEM_OFF_M02+MEMORY_LENGTH)
 #define MEM_OFF_M00   (MEM_OFF_M01+MEMORY_LENGTH)
 
-// Offset into a menmory where the exponent byte is located
+// Offset into a memory where the exponent byte is located
 #define MEM_OFF_EXPONENT  15
 #define MEM_OFF_D0        1
 #define MEM_OFF_D1        3
@@ -227,6 +227,7 @@ enum
 #define MEM_OFF_D8        10
 #define MEM_OFF_D9        11
 #define MEM_OFF_D10       12
+
 
 //--------------------------------------------------------------------------------
 
@@ -377,6 +378,7 @@ boolean flag_mem_display     = false;
 boolean flag_graphics        = false;
 boolean flag_graphics_clear  = false;
 boolean flag_status          = true;
+boolean flag_text            = false;
 
 // Status display fields
 
@@ -388,6 +390,14 @@ char status_num_bytes[STATUS_FIELD_LEN];
 char status_status[STATUS_FIELD_LEN];
 char status_sd_stat[STATUS_FIELD_LEN];
 char status_error[STATUS_FIELD_LEN];
+
+// text display lines
+#define TEXT_DISPLAY_LINES  8
+char text_display_line[TEXT_DISPLAY_LINES][20];
+
+// Text display cursor position
+int text_x = 0;
+int text_y = 0;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -1175,6 +1185,20 @@ void display_graphics()
       //      display.drawRect(0, 0, 127, 63, 1);
       display.display();
     }
+}
+
+void display_text()
+{
+  int i;
+  
+  display.clearDisplay();
+  display.setCursor(0,0);
+
+  for(i=0; i<TEXT_DISPLAY_LINES; i++)
+    {
+      display.println(text_display_line[i]);
+    }
+  display.display();
 }
 
 void display_status()
@@ -2048,8 +2072,13 @@ void update_buttons()
 
 
 void setup() {
+  int i;
 
-
+  for(i=0; i<TEXT_DISPLAY_LINES; i++)
+    {
+      sprintf(text_display_line[i], "Text %d", i);
+    }
+  
   //  Wire2.begin();
 
 #if ENABLE_OLED_SETUP
@@ -2249,6 +2278,12 @@ void update_display()
     {
       display_status();
     }
+
+  // Text display
+  if( flag_text )
+    {
+      display_text();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2292,6 +2327,7 @@ void meta_check()
 	  flag_mem_display = false;
 	  flag_graphics = false;
 	  flag_status = true;
+	  flag_text = false;
 	  break;
 
 	case '2':
@@ -2299,12 +2335,21 @@ void meta_check()
 	  flag_graphics = true;
 	  flag_graphics_clear = true;
 	  flag_status = false;
+	  flag_text = false;
 	  break;
 
 	case '3':
 	  flag_mem_display = true;
 	  flag_graphics = false;
 	  flag_status = false;
+	  flag_text = false;
+	  break;
+
+	case '4':
+	  flag_mem_display = false;
+	  flag_graphics = false;
+	  flag_status = false;
+	  flag_text = true;
 	  break;
 
 	case '0':
@@ -2312,6 +2357,7 @@ void meta_check()
 	  flag_mem_display = false;
 	  flag_graphics = false;
 	  flag_status = false;
+	  flag_text = false;
 	  break;
 	  
 	}
@@ -2342,12 +2388,34 @@ void meta_check()
       Serial.println(line);
     }
 
+  // Put text on the display
+  //
+  // 1.xxyy E41     Set cursor to (x,y)
+  // 2.aabbccdd     Put text on display aa etc are ascii codes
+  
   if( strncmp(M0F+MEM_OFF_EXPONENT, "41", 2)==0 )
     {
-      // Set up graphics display flag
-      flag_mem_display = (*(M0F+MEM_OFF_D1)=='1')?true:false;
-      Serial.print("Memory display flag:");
-      Serial.println(flag_mem_display);
+      int i;
+      
+      switch(*(M0F+MEM_OFF_D0))
+	{
+	case '1':
+	  text_x = (*(M0F+MEM_OFF_D2)-'0')*10+(*(M0F+MEM_OFF_D3)-'0');
+	  text_y = (*(M0F+MEM_OFF_D4)-'0')*10+(*(M0F+MEM_OFF_D5)-'0');
+	  break;
+
+	case '2':
+	  for(i=0; i<4; i++)
+	    {
+	      text_display_line[text_y][text_x+i] = (*(M0F+MEM_OFF_D1+2*i)-'0')*10+(*(M0F+MEM_OFF_D1+2*i+1)-'0');
+	    }
+
+	  break;
+
+	default:
+	  break;
+	}
+	
     }
 
   if( strncmp(M0F+MEM_OFF_EXPONENT, "47", 2)==0 )
