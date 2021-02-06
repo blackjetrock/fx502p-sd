@@ -69,6 +69,9 @@
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
 
+typedef void (*FPTR)();
+typedef void (*CMD_FPTR)(String cmd);
+
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
 
@@ -123,8 +126,23 @@ const int dataPin   = PC1;
 
 
 // FSM output flags
+boolean cis_flag_event_dotkey = false;
+boolean cis_flag_event_ackey = false;
 boolean cis_flag_event = false;
 char *cis_event = "None";
+
+// Key handlers
+
+void dotkey_null()
+{
+}
+
+void ackey_null()
+{
+}
+
+FPTR dotkey_handler = dotkey_null;
+FPTR ackey_handler  = ackey_null;
 
 // Event flags
 boolean cis_flag_event_read_file = false;  // File data has been read
@@ -159,7 +177,8 @@ enum
     CIS_RD_STAT       = 9,
     CIS_RD_WAIT_TRANS = 10,
     CIS_RD_SENDING    = 11,
-    
+    CIS_POSSIBLE_DOT  = 12,
+    CIS_POSSIBLE_AC   = 13,    
   };
 
 char *state_decode_list[] =
@@ -176,6 +195,8 @@ char *state_decode_list[] =
     "CIS_RD_STAT",
     "CIS_RD_WAIT_TRANS",
     "CIS_RD_SENDING",
+    "CIS_POSSIBLE_DOT",
+    "CIS_POSSIBLE_AC",
   };
   
 // Commands
@@ -266,8 +287,6 @@ volatile boolean monitor_enabled = true;
 
 typedef unsigned char BYTE;
 
-typedef void (*FPTR)();
-typedef void (*CMD_FPTR)(String cmd);
 
 // CE ISR states
 
@@ -1210,20 +1229,52 @@ void display_graphics()
 //
 //
 
+void dotkey_text_help()
+{
+  display.clearDisplay();
+  display.setCursor(0,0);
+  
+  display.println("                    ");
+  display.println("       Text Help    ");
+  display.println("1.xxyy E41 curX,Y   ");
+  display.println("2.aabbccdd E41      ");
+  display.println("  ASCII aa,bb,cc,dd ");
+  
+  display.display();
+  dotkey_handler = display_help;
+}
+
+void dotkey_graphics_help()
+{
+  display.clearDisplay();
+  display.setCursor(0,0);
+  
+  display.println("                    ");
+  display.println("  Graphics   Help   ");
+  display.println("1.xxxyyy E50 set X,Y");
+  
+  display.display();
+  dotkey_handler = dotkey_text_help;
+}
+
 void display_help()
 {
-display.clearDisplay();
-display.setCursor(0,0);
-
-display.println("                    ");
-display.println("         HELP       ");
-display.println("1.0 E40 Help");
-display.println("1.1 E40 Status");
-display.println("1.2 E40 Graphics");
-display.println("1.3 E40 Memory");
-display.println("1.4 E40 Text");
-
-display.display();
+  display.clearDisplay();
+  display.setCursor(0,0);
+  
+  display.println("                    ");
+  display.println("    Display  Help   ");
+  display.println("1.0 E40 Help");
+  display.println("1.1 E40 Status");
+  display.println("1.2 E40 Graphics");
+  display.println("1.3 E40 Memory");
+  display.println("1.4 E40 Text");
+  display.println("         . Next Page");
+  
+  display.display();
+  
+  // Set up handler for next page
+  dotkey_handler = dotkey_graphics_help;
 }
 
 void display_text()
@@ -2565,11 +2616,30 @@ void loop() {
       
     }
 #endif
+
+  if( cis_flag_event_dotkey )
+    {
+      cis_flag_event_dotkey = false;
+      Serial.println("Dot Key");
+
+      // Call the dot key handler
+      (*dotkey_handler)();
+    }
+
+  if( cis_flag_event_ackey )
+    {
+      cis_flag_event_ackey = false;
+      Serial.println("AC Key");
+
+      // Call the AC key handler
+      (*ackey_handler)();
+    }
   
   if( cis_flag_event )
     {
       cis_flag_event = false;
 
+      
       // Get file number from first two word
       filenum[1] = (unsigned char)(((data_words[0] >> 7) & 0x0F)>>0);
       filenum[2] = (unsigned char)(((data_words[0] >> 7) & 0xF0)>>4);
@@ -2603,10 +2673,7 @@ void loop() {
 
 	  // Check for meta information
 	  meta_check();
-
-
 	}
-
     }
 
   if( new_word )
@@ -2729,11 +2796,15 @@ void end_of_packet()
       
       switch(captured_word)
 	{
-#if 0
-	case IP_RESET:
-	  ce_isr_state = CIS_502_PO_1;
+	  // Close followed by reset is a '.' key
+	case IP_CLOSE:
+	  ce_isr_state = CIS_POSSIBLE_DOT;
 	  break;
-#endif	      
+
+	case IP_RESET:
+	  ce_isr_state = CIS_POSSIBLE_AC;
+	  break;
+
 	case IP_UNKA:
 	  ce_isr_state = CIS_RX_UNKNOWN_A;
 	  break;
@@ -3141,7 +3212,41 @@ void end_of_packet()
 	  break;
 	}
       break;
-	  
+
+    case CIS_POSSIBLE_AC:
+      switch(captured_word)
+	{
+	  // If it's a CLOSE then we do have an AC
+	case IP_STOP:
+	  cis_flag_event_ackey = true;
+	  break;
+
+	default:
+	  break;
+	}
+
+      // Back to IDLE whatever
+      ce_isr_state = CIS_IDLE;
+
+      break;
+      
+    case CIS_POSSIBLE_DOT:
+      switch(captured_word)
+	{
+	  // If it's a reset then we do have a dot
+	case IP_RESET:
+	  cis_flag_event_dotkey = true;
+	  break;
+
+	default:
+
+	  break;
+	}
+
+      // Back to IDLE whatever
+      ce_isr_state = CIS_IDLE;
+      break;
+#if 0      
     case CIS_502_PO_1:
       switch(captured_word)
 	{
@@ -3152,7 +3257,7 @@ void end_of_packet()
 	  break;
 	}
       break;
-	  
+#endif	  
     }
 
 #if TRACE_TAGS
