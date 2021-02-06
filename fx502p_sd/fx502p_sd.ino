@@ -32,6 +32,11 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+#if 0
+#include "../fx502p_prog_engine/fx502p_prog.h"
+#include "../fx502p_prog_engine/fx502p_prog.c"
+#endif
+
 // Code configuration
 #define USE_HINT_LENGTH            0   // Sometimes we know how long the next packet is
 #define LATER_OP_RD                1   // Fixes the problem where the OP GPIO state isn't read correctly,
@@ -53,6 +58,7 @@
 #define STAT_BITS_0                0
 #define SHIFT_TX_DATA              1
 #define TX_CHANGE_RISING_EDGE      1   // TX data changes on rising edge of SP
+#define DISPLAY_OTHER_WORDS        0   // Do we display words on th einterface where CE inactive?
 
 #define HEADER_LENGTH            -50
 #define HEADER_WORD              0xffff
@@ -74,7 +80,11 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 uint8_t sdaPin = PC7;
 uint8_t sclPin = PC6;
 
-SoftWire sw(sdaPin, sclPin);
+SoftWire sw(PC7, PC6);
+char swTxBuffer[16];
+char swRxBuffer[16];
+
+AsyncDelay readInterval;
 
 // Macro to set up the first data bit (has to be done on previous clock edge
 // before sending the data
@@ -215,6 +225,7 @@ enum
 #define MEM_OFF_M00   (MEM_OFF_M01+MEMORY_LENGTH)
 
 // Offset into a memory where the exponent byte is located
+// Offsets are into a stringified memory value
 #define MEM_OFF_EXPONENT  15
 #define MEM_OFF_D0        1
 #define MEM_OFF_D1        3
@@ -374,11 +385,18 @@ volatile int bit_period = 102;
 // We can prefix the filenumbers with this string to get more filenames
 char filename_bank[20] = "";
 
-boolean flag_mem_display     = false;
-boolean flag_graphics        = false;
-boolean flag_graphics_clear  = false;
-boolean flag_status          = true;
-boolean flag_text            = false;
+enum DISPLAY_PAGE
+  {
+    DISPLAY_PAGE_NONE     = 0,
+    DISPLAY_PAGE_STATUS   = 1,
+    DISPLAY_PAGE_GRAPHICS = 2,
+    DISPLAY_PAGE_TEXT     = 3,
+    DISPLAY_PAGE_MEMORIES = 4,
+    DISPLAY_PAGE_HELP     = 5,
+  };
+
+boolean flag_graphics_clear = false;
+int current_display = DISPLAY_PAGE_STATUS;
 
 // Status display fields
 
@@ -393,7 +411,7 @@ char status_error[STATUS_FIELD_LEN];
 
 // text display lines
 #define TEXT_DISPLAY_LINES  8
-char text_display_line[TEXT_DISPLAY_LINES][20];
+char text_display_line[TEXT_DISPLAY_LINES][21];
 
 // Text display cursor position
 int text_x = 0;
@@ -1181,10 +1199,31 @@ void display_graphics()
   if( flag_graphics_clear )
     {
       flag_graphics_clear = false;
+
       display.clearDisplay();
-      //      display.drawRect(0, 0, 127, 63, 1);
       display.display();
     }
+}
+
+// Help display
+// Pages of useful info
+//
+//
+
+void display_help()
+{
+display.clearDisplay();
+display.setCursor(0,0);
+
+display.println("                    ");
+display.println("         HELP       ");
+display.println("1.0 E40 Help");
+display.println("1.1 E40 Status");
+display.println("1.2 E40 Graphics");
+display.println("1.3 E40 Memory");
+display.println("1.4 E40 Text");
+
+display.display();
 }
 
 void display_text()
@@ -1192,10 +1231,10 @@ void display_text()
   int i;
   
   display.clearDisplay();
-  display.setCursor(0,0);
 
   for(i=0; i<TEXT_DISPLAY_LINES; i++)
     {
+      display.setCursor(0,i*8);
       display.println(text_display_line[i]);
     }
   display.display();
@@ -1273,10 +1312,36 @@ void printTwoDigit(int n)
 }
 
 #define I2C_ADDRESS 0x68
-#define NUM_BYTES    1
+//#define I2C_ADDRESS 0x57
+#define NUM_BYTES    7
 
 void readTime(void)
 {
+
+#if 0
+  DateTime now = RTC.now();
+    
+    Serial.print(now.year(), DEC);
+    Serial.print('/');
+    Serial.print(now.month(), DEC);
+    Serial.print('/');
+    Serial.print(now.day(), DEC);
+    Serial.print(' ');
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    Serial.print(now.second(), DEC);
+    Serial.println();
+    
+    Serial.print(" since midnight 1/1/1970 = ");
+    Serial.print(now.unixtime());
+    Serial.print("s = ");
+    Serial.print(now.unixtime() / 86400L);
+    Serial.println("d");
+
+#else
+  
   // Ensure register address is valid
   sw.beginTransmission(I2C_ADDRESS);
   sw.write(uint8_t(0)); // Access the first register
@@ -1356,6 +1421,7 @@ void readTime(void)
   Serial.print(':');
   printTwoDigit(second);
   Serial.println();
+#endif
 }
 
 void cmd_clk(String cmd)
@@ -2074,10 +2140,17 @@ void update_buttons()
 void setup() {
   int i;
 
+  sw.setTimeout_ms(40);
+  sw.begin();
+
+#if 1
+  Serial.println(1.234e10);
+  
   for(i=0; i<TEXT_DISPLAY_LINES; i++)
     {
-      sprintf(text_display_line[i], "Text %d", i);
+      sprintf(text_display_line[i], "                    ");
     }
+#endif
   
   //  Wire2.begin();
 
@@ -2264,26 +2337,31 @@ void buffer_point(int captured_word, int word_bits)
 
 void update_display()
 {
-  if( flag_mem_display )
+  switch(current_display)
     {
-      display_memories();
-    }
-
-  if( flag_graphics )
-    {
-      display_graphics();
-    }
-
-  if( flag_status )
-    {
-      display_status();
-    }
-
-  // Text display
-  if( flag_text )
-    {
+    case DISPLAY_PAGE_TEXT:
       display_text();
+      break;
+
+    case DISPLAY_PAGE_GRAPHICS:
+      display_graphics();
+      break;
+      
+    case DISPLAY_PAGE_STATUS:
+      display_status();
+      break;
+      
+    case DISPLAY_PAGE_HELP:
+      display_help();
+      break;
+      
+    case DISPLAY_PAGE_MEMORIES:
+      display_memories();
+      break;
+    default:
+      break;
     }
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2324,46 +2402,33 @@ void meta_check()
       switch(*(M0F+MEM_OFF_D1))
 	{
 	case '1':
-	  flag_mem_display = false;
-	  flag_graphics = false;
-	  flag_status = true;
-	  flag_text = false;
+	  current_display = DISPLAY_PAGE_STATUS;
 	  break;
 
 	case '2':
-	  flag_mem_display = false;
-	  flag_graphics = true;
+	  current_display = DISPLAY_PAGE_GRAPHICS;
 	  flag_graphics_clear = true;
-	  flag_status = false;
-	  flag_text = false;
 	  break;
 
 	case '3':
-	  flag_mem_display = true;
-	  flag_graphics = false;
-	  flag_status = false;
-	  flag_text = false;
+	  current_display = DISPLAY_PAGE_MEMORIES;
 	  break;
 
 	case '4':
-	  flag_mem_display = false;
-	  flag_graphics = false;
-	  flag_status = false;
-	  flag_text = true;
+	  current_display = DISPLAY_PAGE_TEXT;
 	  break;
 
 	case '0':
-	default:
-	  flag_mem_display = false;
-	  flag_graphics = false;
-	  flag_status = false;
-	  flag_text = false;
+	  current_display = DISPLAY_PAGE_HELP;
 	  break;
 	  
+	default:
+	  current_display = DISPLAY_PAGE_NONE;
+	  break;
 	}
       
-      Serial.print("Graphics flag:");
-      Serial.println(flag_graphics);
+      Serial.print("Display page:");
+      Serial.println(current_display);
     }
 
   // Graphics command
@@ -2400,14 +2465,22 @@ void meta_check()
       switch(*(M0F+MEM_OFF_D0))
 	{
 	case '1':
-	  text_x = (*(M0F+MEM_OFF_D2)-'0')*10+(*(M0F+MEM_OFF_D3)-'0');
-	  text_y = (*(M0F+MEM_OFF_D4)-'0')*10+(*(M0F+MEM_OFF_D5)-'0');
+	  text_x = (*(M0F+MEM_OFF_D1)-'0')*10+(*(M0F+MEM_OFF_D2)-'0');
+	  text_y = (*(M0F+MEM_OFF_D3)-'0')*10+(*(M0F+MEM_OFF_D4)-'0');
+	  Serial.print(M0F);
+	  Serial.print(" x,y : ");
+	  Serial.print(text_x);
+	  Serial.print(" ");
+	  Serial.println(text_y);
+	  
 	  break;
 
 	case '2':
 	  for(i=0; i<4; i++)
 	    {
 	      text_display_line[text_y][text_x+i] = (*(M0F+MEM_OFF_D1+2*i)-'0')*10+(*(M0F+MEM_OFF_D1+2*i+1)-'0');
+	      text_display_line[2][3] = 'Y';
+	      
 	    }
 
 	  break;
@@ -2478,6 +2551,7 @@ void loop() {
 #endif
   
 #if 1
+#if DISPLAY_OTHER_WORDS
   if( other_word_flag )
     {
       other_word_flag = false;
@@ -2490,6 +2564,7 @@ void loop() {
 	}
       
     }
+#endif
   
   if( cis_flag_event )
     {
@@ -2532,24 +2607,6 @@ void loop() {
 
 	}
 
-      if( !flag_mem_display )
-	{
-	  //	  display.fillRect(0, y, 128, 8, BLACK);
-	  //display.setCursor(0,y);
-	  y += 8;
-	  if( y > 56 )
-	    {
-	      y = 0;
-	    }
-
-#if 0	  
-	  display.print(cis_event);
-	  display.print (" '");
-	  display.print((char *) &(filenum[0]));
-	  display.print("'");
-	  display.display();
-#endif
-	}
     }
 
   if( new_word )
