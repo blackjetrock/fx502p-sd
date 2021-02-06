@@ -260,6 +260,276 @@ enum
 #define MEM_OFF_D9        11
 #define MEM_OFF_D10       12
 
+//--------------------------------------------------------------------------------
+//
+// FX-502P Program Tokens
+//
+
+#define TF_NEWLINE 1      // Newline before token
+#define TF_NOGAP   2      // No gaps between nogap tokens
+struct
+{
+  char    *keyword;
+  uint8_t flags;
+} token_table[256] =
+  {
+    {"P0", TF_NEWLINE},       
+    {"P1", TF_NEWLINE},
+    {"P2", TF_NEWLINE},
+    {"P3", TF_NEWLINE},
+    {"P4", TF_NEWLINE},
+    {"P5", TF_NEWLINE},
+    {"P6", TF_NEWLINE},
+    {"P7", TF_NEWLINE},
+    {"P8", TF_NEWLINE},
+    {"P9", TF_NEWLINE},
+    {"0", TF_NOGAP},
+    {"1", TF_NOGAP},
+    {"2", TF_NOGAP},
+    {"3", TF_NOGAP},
+    {".", TF_NOGAP},
+    {"EXP", 0x00},
+    {"RND0", 0x00},
+    {"RND1", 0x00},
+    {"RND2", 0x00},
+    {"RND3", 0x00},
+    {"RND4", 0x00},
+    {"RND5", 0x00},
+    {"RND6", 0x00},
+    {"RND7", 0x00},
+    {"RND8", 0x00},
+    {"RND9", 0x00},
+    {"4", TF_NOGAP},
+    {"5", TF_NOGAP},
+    {"6", TF_NOGAP},
+    {"7", TF_NOGAP},
+    {"8", TF_NOGAP},
+    {"9", TF_NOGAP},
+    {"LBL0", 0x00},
+    {"LBL1", 0x00},
+    {"LBL2", 0x00},
+    {"LBL3", 0x00},
+    {"LBL4", 0x00},
+    {"LBL5", 0x00},
+    {"LBL6", 0x00},
+    {"LBL7", 0x00},
+    {"LBL8", 0x00},
+    {"LBL9", 0x00},
+    {"HLT", 0x00},
+    {"\"", 0x00},
+    {"20+", 0x00},
+    {"40+", 0x00},
+    {"60+", 0x00},
+    {"?2F", 0x00},
+    {"GOTO0", 0x00},
+    {"GOTO1", 0x00},
+    {"GOTO2", 0x00},
+    {"GOTO3", 0x00},
+    {"GOTO4", 0x00},
+    {"GOTO5", 0x00},
+    {"GOTO6", 0x00},
+    {"GOTO7", 0x00},
+    {"GOTO8", 0x00},
+    {"GOTO9", 0x00},
+    {"xD", 0x00},
+    {"?3B", 0x00},
+    {"ENG", 0x00},
+    {"DMS", 0x00},
+    {"LOG", 0x00},
+    {"LN", 0x00},
+    {"GSBP0", 0x00},
+    {"GSBP1", 0x00},
+    {"GSBP2", 0x00},
+    {"GSBP3", 0x00},
+    {"GSBP4", 0x00},
+    {"GSBP5", 0x00},
+    {"GSBP6", 0x00},
+    {"GSBP7", 0x00},
+    {"GSBP8", 0x00},
+    {"GSBP9", 0x00},
+    {"+/-", 0x00},
+    {"(", 0x00},
+    {")", 0x00},
+    {"SIN", 0x00},
+    {"COS", 0x00},
+    {"TAN", 0x00},
+    {"X<>M00", 0x00},
+    {"X<>M01", 0x00},
+    {"X<>M02", 0x00},
+    {"X<>M03", 0x00},
+    {"X<>M04", 0x00},
+    {"X<>M05", 0x00},
+    {"X<>M06", 0x00},
+    {"X<>M07", 0x00},
+    {"X<>M08", 0x00},
+    {"X<>M09", 0x00},
+    {"*", 0x00},
+    {"/", 0x00},
+    {"+", 0x00},
+    {"-", 0x00},
+    {"=", 0x00},
+    {"EXE", 0x00},
+    {"Min00", 0x00},
+    {"Min01", 0x00},
+    {"Min02", 0x00},
+    {"Min03", 0x00},
+    {"Min04", 0x00},
+    {"Min05", 0x00},
+    {"Min06", 0x00},
+    {"Min07", 0x00},
+    {"Min08", 0x00},
+    {"Min09", 0x00},
+    {"?6A", 0x00},
+    {"DSZ", 0x00},
+    {"X=0", 0x00},
+    {"X=F", 0x00},
+    {"RND#", 0x00},
+    {"PI", 0x00},
+    {"MR00", 0x00},
+    {"MR01", 0x00},
+    {"MR02", 0x00},
+    {"MR03", 0x00},
+    {"MR04", 0x00},
+    {"MR05", 0x00},
+    {"MR06", 0x00},
+    {"MR07", 0x00},
+    {"MR08", 0x00},
+    {"MR09", 0x00},
+    {"ISZ",  0x00},
+    {"x>=0", 0x00},
+    {"x>=F", 0x00},
+    {"MEANX", 0x00},
+    {"SDX", 0x00},
+    {"SDXN", 0x00},
+    {"M-00", 0x00},
+    {"M-01", 0x00},
+    {"M-02", 0x00},
+    {"M-03", 0x00},
+    {"M-04", 0x00},
+    {"M-05", 0x00},
+    {"M-06", 0x00},
+    {"M-07", 0x00},
+    {"M-08", 0x00},
+    {"M-09", 0x00},
+    {"PAUSE", 0x00},
+    {"IND", 0x00},
+    {"SAVE", 0x00},
+    {"LOAD", 0x00},
+    {"MAC", 0x00},
+    {"SAC", 0x00},
+    {"M+00", 0x00},
+    {"M+01", 0x00},
+    {"M+02", 0x00},
+    {"M+03", 0x00},
+    {"M+04", 0x00},
+    {"M+05", 0x00},
+    {"M+06", 0x00},
+    {"M+07", 0x00},
+    {"M+08", 0x00},
+    {"M+09", 0x00},
+    {"XDEL", 0x00},
+    {"?9B", 0x00},
+    {"SENG", 0x00},
+    {"SDMS", 0x00},
+    {"10^X", 0x00},
+    {"e^X", 0x00},
+    {"X<>M10", 0x00},
+    {"X<>M11", 0x00},
+    {"X<>M12", 0x00},
+    {"X<>M13", 0x00},
+    {"X<>M14", 0x00},
+    {"X<>M15", 0x00},
+    {"X<>M16", 0x00},
+    {"X<>M17", 0x00},
+    {"X<>M18", 0x00},       
+    {"X<>M19", 0x00},
+    {"ABS", 0x00},
+    {"INT", 0x00},
+    {"FRAC", 0x00},
+    {"ASN", 0x00},
+    {"ACS", 0x00},
+    {"ATN", 0x00},
+    {"Min10", 0x00},
+    {"Min11", 0x00},
+    {"Min12", 0x00},
+    {"Min13", 0x00},
+    {"Min14", 0x00},
+    {"Min15", 0x00},
+    {"Min16", 0x00},
+    {"Min17", 0x00},
+    {"Min18", 0x00},
+    {"Min19", 0x00},
+    {"X^Y", 0x00},
+    {"X^(1/Y)", 0x00},
+    {"R>P", 0x00},
+    {"P>R", 0x00},
+    {"%", 0x00},
+    {"SEXE", 0x00},
+    {"MR10", 0x00},
+    {"M-11", 0x00},
+    {"M-12", 0x00},
+    {"M-13", 0x00},
+    {"M-14", 0x00},
+    {"M-15", 0x00},
+    {"M-16", 0x00},
+    {"M-17", 0x00},
+    {"M-18", 0x00},
+    {"M-19", 0x00},
+    {"DEG", 0x00},
+    {"RAD", 0x00},
+    {"GRA", 0x00},
+    {"HYPSIN", 0x00},
+    {"HYPCOS", 0x00},
+    {"HYPTAN", 0x00},
+    {"M-10", 0x00},
+    {"M-11", 0x00},
+    {"M-12", 0x00},
+    {"M-13", 0x00},
+    {"M-14", 0x00},
+    {"M-15", 0x00},
+    {"M-16", 0x00},
+    {"M-17", 0x00},
+    {"M-18", 0x00},
+    {"M-19", 0x00},
+    {"DEG", 0x00},
+    {"RAD", 0x00},
+    {"GRA", 0x00},
+    {"HYPSIN", 0x00},
+    {"HYPCOS", 0x00},
+    {"M+10", 0x00},
+    {"M+11", 0x00},
+    {"M+12", 0x00},
+    {"M+13", 0x00},
+    {"M+14", 0x00},
+    {"M+15", 0x00},
+    {"M+16", 0x00},
+    {"M+17", 0x00},
+    {"M+18", 0x00},
+    {"M+19", 0x00},
+    {"?EA", 0x00},
+    {"?EB", 0x00},
+    {"?EC", 0x00},
+    {"HYPASN", 0x00},
+    {"HYPACS", 0x00},
+    {"HYPATN", 0x00},
+    {"X<>MF", 0x00},
+    {"MinF", 0x00},
+    {"MRF", 0x00},
+    {"M-F", 0x00},
+    {"M+F", 0x00},
+    {"?F5", 0x00},
+    {"Min1F", 0x00},
+    {"MR1F", 0x00},
+    {"M-1F", 0x00},
+    {"M+1F", 0x00},
+    {"AC", 0x00},
+    {"?FB", 0x00},
+    {"?FC", 0x00},
+    {"?FD", 0x00},
+    {"?FE", 0x00},
+    {"?FF", 0x00},
+    
+  };
 
 //--------------------------------------------------------------------------------
 
@@ -331,7 +601,6 @@ unsigned int menu_size = 0;
 
 #define MAX_LISTFILES 7
 #define MAX_NAME 20
-
 MENU_ELEMENT listfiles[MAX_LISTFILES+1];
 int num_listfiles;
 char names[MAX_LISTFILES][MAX_NAME];
@@ -347,7 +616,6 @@ int stored_bytes_index = 0;
 int bytecount = 24;
 
 // communication with ISRs
-
 volatile int copied_word = 0;
 volatile int word_bits = 0;
 volatile int copied_word_bits = 0;
@@ -363,8 +631,6 @@ volatile uint8_t blen_buffer[BUF_LEN];
 volatile int num_data_words = 0;
 
 #define OBUF_LEN 100
-
-volatile int num_other_words = 0;
 volatile int other_data_words[OBUF_LEN];
 
 // This is where data words appear
@@ -380,7 +646,7 @@ volatile int data_words[NUM_DATA_WORDS];
 // 8 bits as it has the start bit, stop bit and parity if we have it on
 
 volatile unsigned int capture_bits_len = 0;
-volatile unsigned int capture_bits = 0xffff;
+
 
 // Flag that indicates we are looking for a start bit
 volatile int waiting_for_start = 1;
@@ -412,10 +678,13 @@ enum DISPLAY_PAGE
     DISPLAY_PAGE_TEXT     = 3,
     DISPLAY_PAGE_MEMORIES = 4,
     DISPLAY_PAGE_HELP     = 5,
+    DISPLAY_PROG_TOKENS   = 6,
   };
 
 boolean flag_graphics_clear = false;
 int current_display = DISPLAY_PAGE_STATUS;
+
+int next_display_prog_start = 2;
 
 // Status display fields
 
@@ -670,7 +939,7 @@ void cmd_display(String cmd)
 		default:
 		  sprintf(tag_decode, "%20s", "Send All Done");
 		  
-		break;
+		  break;
 		}
 
 	      break;
@@ -1276,6 +1545,107 @@ void display_help()
   // Set up handler for next page
   dotkey_handler = dotkey_graphics_help;
 }
+			      
+// Displays the stored programs as text
+			      
+
+
+
+void display_prog_core(int start)
+{
+  int i;
+  int word, data;
+  int nextword, nextdata;
+  boolean nogap = false;
+  int cursor_x = 0;
+  int token_x = 0;
+  
+  display.clearDisplay();
+  display.setCursor(0,0);
+	  
+  for(i= start; i<num_data_words; i++)
+    {
+
+      // Have we reached the end of the page?
+      word = data_words[i];    
+      data = (word & 0x7F80) >> 7;
+      data = reverse(data, 8);
+      nextword = data_words[i+1];    
+      nextdata = (nextword & 0x7F80) >> 7;
+      nextdata = reverse(nextdata, 8);
+
+      Serial.print("Y=");
+      Serial.println(display.getCursorY());
+      
+      if( (display.getCursorY() == 64) )
+	{
+	  next_display_prog_start = i;
+	  dotkey_handler = dotkey_display_prog;
+	  return;
+	}
+
+      // Have we reached the end of tokens?
+      if( data == 0xFF )
+	{
+	  dotkey_handler = display_prog;
+	  return;
+	}
+      
+       if( token_table[data].flags & TF_NEWLINE )
+	{
+	  display.println("");
+	  Serial.println("");
+	}
+
+       if( token_table[data].flags & TF_NOGAP )
+	{
+	  // Do not print gap to next token if next token is also no gap
+	  if( token_table[nextdata].flags & TF_NOGAP )
+	    {
+	      nogap = true;
+	    }
+	  else
+	    {
+	      nogap = false;
+	    }
+	}
+
+       // Move to the next line if the token won't fit on this one
+       cursor_x = display.getCursorX();
+       token_x = 6*strlen(token_table[data].keyword);
+
+       if( (cursor_x + token_x) > 127 )
+	 {
+	   display.println("");
+	 }
+       
+      display.print(token_table[data].keyword);
+      if( !nogap)
+	{
+	  display.print(" ");
+	}
+      
+      Serial.print(token_table[data].keyword);
+      Serial.print("(");
+      Serial.print(data, HEX);
+      Serial.print(") ");
+      
+      
+      display.display();
+    }
+
+  dotkey_handler = display_prog;
+}
+
+void display_prog()
+{
+  display_prog_core(2);
+}
+
+void dotkey_display_prog()
+{
+  display_prog_core(next_display_prog_start);
+}
 
 void display_text()
 {
@@ -1372,24 +1742,24 @@ void readTime(void)
 #if 0
   DateTime now = RTC.now();
     
-    Serial.print(now.year(), DEC);
-    Serial.print('/');
-    Serial.print(now.month(), DEC);
-    Serial.print('/');
-    Serial.print(now.day(), DEC);
-    Serial.print(' ');
-    Serial.print(now.hour(), DEC);
-    Serial.print(':');
-    Serial.print(now.minute(), DEC);
-    Serial.print(':');
-    Serial.print(now.second(), DEC);
-    Serial.println();
+  Serial.print(now.year(), DEC);
+  Serial.print('/');
+  Serial.print(now.month(), DEC);
+  Serial.print('/');
+  Serial.print(now.day(), DEC);
+  Serial.print(' ');
+  Serial.print(now.hour(), DEC);
+  Serial.print(':');
+  Serial.print(now.minute(), DEC);
+  Serial.print(':');
+  Serial.print(now.second(), DEC);
+  Serial.println();
     
-    Serial.print(" since midnight 1/1/1970 = ");
-    Serial.print(now.unixtime());
-    Serial.print("s = ");
-    Serial.print(now.unixtime() / 86400L);
-    Serial.println("d");
+  Serial.print(" since midnight 1/1/1970 = ");
+  Serial.print(now.unixtime());
+  Serial.print("s = ");
+  Serial.print(now.unixtime() / 86400L);
+  Serial.println("d");
 
 #else
   
@@ -1569,9 +1939,9 @@ void cmd_help(String cmd)
 #else
     for(i=0; i<NUM_CMDS; i++)
 #endif
-    {
-      Serial.println(cmdlist[i].cmdname);
-    }
+      {
+	Serial.println(cmdlist[i].cmdname);
+      }
 }
 
 void run_monitor()
@@ -2409,6 +2779,11 @@ void update_display()
     case DISPLAY_PAGE_MEMORIES:
       display_memories();
       break;
+
+    case DISPLAY_PROG_TOKENS:
+      display_prog();
+      break;
+
     default:
       break;
     }
@@ -2467,6 +2842,10 @@ void meta_check()
 
 	case '4':
 	  current_display = DISPLAY_PAGE_TEXT;
+	  break;
+
+	case '5':
+	  current_display = DISPLAY_PROG_TOKENS;
 	  break;
 
 	case '0':
@@ -3276,8 +3655,8 @@ void spISR()
   int ce = ISOLATE_BIT(13, pb);
 
 #if !LATER_OP_RD
-      pb = GPIOB->IDR;
-      int op = ISOLATE_BIT(4, pb);
+  pb = GPIOB->IDR;
+  int op = ISOLATE_BIT(4, pb);
 #endif
 
 
