@@ -2856,6 +2856,10 @@ void meta_check()
 	  current_display = DISPLAY_PAGE_NONE;
 	  break;
 	}
+
+      // Display page changed so reset dot and AC key handlers
+      dotkey_handler = dotkey_null;
+      ackey_handler  = ackey_null;
       
       Serial.print("Display page:");
       Serial.println(current_display);

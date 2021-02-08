@@ -1,0 +1,306 @@
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// FX502P Program Execution
+//
+//
+// Token codes
+
+typedef void (*PROG_FN)(int token);
+
+typedef struct
+{
+  char *name;
+  int flags;
+  PROG_FN function;  
+} TOKEN;
+
+
+// State of the calculator
+// programs are applied to this structure when they execute
+
+typedef struct 
+{
+  float X;
+  float M0F;
+  float M1F;
+  float M00;
+  float M01;
+  float M02;
+  float M03;
+  float M04;
+  float M05;
+  float M06;
+  float M07;
+  float M08;
+  float M09;
+  float M10;
+  float M11;
+  float M12;
+  float M13;
+  float M14;
+  float M15;
+  float M16;
+  float M17;
+  float M18;
+  float M19;
+  
+} CALC_502_STATE;
+
+// Token codes
+#define TOK_P0
+#define TOK_P1
+#define TOK_P2
+#define TOK_P3
+#define TOK_P4
+#define TOK_P5
+#define TOK_P6
+#define TOK_P7
+#define TOK_P8
+#define TOK_P9
+#define TOK_0
+#define TOK_1
+#define TOK_2
+#define TOK_3
+#define TOK_DOT
+#define TOK_EXP
+#define TOK_RND0
+#define TOK_RND1
+#define TOK_RND2
+#define TOK_RND3
+#define TOK_RND4
+#define TOK_RND5
+#define TOK_RND6
+#define TOK_RND7
+#define TOK_RND8
+#define TOK_RND9
+#define TOK_4
+#define TOK_5
+#define TOK_6
+#define TOK_7
+#define TOK_8
+#define TOK_9
+#define TOK_LBL0
+#define TOK_LBL1
+#define TOK_LBL2
+#define TOK_LBL3
+#define TOK_LBL4
+#define TOK_LBL5
+#define TOK_LBL6
+#define TOK_LBL7
+#define TOK_LBL8
+#define TOK_LBL9
+#define TOK_HLT
+#define TOK_QUOTE
+#define TOK_20
+#define TOK_40
+#define TOK_60
+#define TOK_2F
+#define TOK_GOTO0
+#define TOK_GOTO1
+#define TOK_GOTO2
+#define TOK_GOTO3
+#define TOK_GOTO4
+#define TOK_GOTO5
+#define TOK_GOTO6
+#define TOK_GOTO7
+#define TOK_GOTO8
+#define TOK_GOTO9
+#define TOK_xD
+#define TOK_3B
+#define TOK_ENG
+#define TOK_DMS
+#define TOK_LOG
+#define TOK_LN
+#define TOK_GSBP0
+#define TOK_GSBP1
+#define TOK_GSBP2
+#define TOK_GSBP3
+#define TOK_GSBP4
+#define TOK_GSBP5
+#define TOK_GSBP6
+#define TOK_GSBP7
+#define TOK_GSBP8
+#define TOK_GSBP9
+#define TOK_PLUSMINUS
+#define TOK_OPENBRA
+#define TOK_CLOSEBRA
+#define TOK_SIN
+#define TOK_COS
+#define TOK_TAN
+#define TOK_X_TO_M00
+#define TOK_X_TO_M01
+#define TOK_X_TO_M02
+#define TOK_X_TO_M03
+#define TOK_X_TO_M04
+#define TOK_X_TO_M05
+#define TOK_X_TO_M06
+#define TOK_X_TO_M07
+#define TOK_X_TO_M08
+#define TOK_X_TO_M09
+#define TOK_TIMES
+#define TOK_DIVIDE
+#define TOK_PLUS
+#define TOK_MINUS
+#define TOK_EQUAL
+#define TOK_EXE
+#define TOK_Min00
+#define TOK_Min01
+#define TOK_Min02
+#define TOK_Min03
+#define TOK_Min04
+#define TOK_Min05
+#define TOK_Min06
+#define TOK_Min07
+#define TOK_Min08
+#define TOK_Min09
+#define TOK_6A
+#define TOK_DSZ
+#define TOK_X_EQUAL_ZERO
+#define TOK_X_EQUAL_F
+#define TOK_RND_NUM
+#define TOK_PI
+#define TOK_MR00
+#define TOK_MR01
+#define TOK_MR02
+#define TOK_MR03
+#define TOK_MR04
+#define TOK_MR05
+#define TOK_MR06
+#define TOK_MR07
+#define TOK_MR08
+#define TOK_MR09
+#define TOK_ISZ
+#define TOK_X_GT_EQ_ZERO
+#define TOK_X_GT_EQ_F
+#define TOK_MEANX
+#define TOK_SDX
+#define TOK_SDXN
+#define TOK_M_MINUS_00
+#define TOK_M_MINUS_01
+#define TOK_M_MINUS_02
+#define TOK_M_MINUS_03
+#define TOK_M_MINUS_04
+#define TOK_M_MINUS_05
+#define TOK_M_MINUS_06
+#define TOK_M_MINUS_07
+#define TOK_M_MINUS_08
+#define TOK_M_MINUS_09
+#define TOK_PAUSE
+#define TOK_IND
+#define TOK_SAVE
+#define TOK_LOAD
+#define TOK_MAC
+#define TOK_SAC
+#define TOK_M_PLUS_00
+#define TOK_M_PLUS_01
+#define TOK_M_PLUS_02
+#define TOK_M_PLUS_03
+#define TOK_M_PLUS_04
+#define TOK_M_PLUS_05
+#define TOK_M_PLUS_06
+#define TOK_M_PLUS_07
+#define TOK_M_PLUS_08
+#define TOK_M_PLUS_09
+#define TOK_XDEL
+#define TOK_9B
+#define TOK_SENG
+#define TOK_SDMS
+#define TOK_10_POW_X
+#define TOK_e_POW_X
+#define TOK_X_TO_M10
+#define TOK_X_TO_M11
+#define TOK_X_TO_M12
+#define TOK_X_TO_M13
+#define TOK_X_TO_M14
+#define TOK_X_TO_M15
+#define TOK_X_TO_M16
+#define TOK_X_TO_M17
+#define TOK_X_TO_M18
+#define TOK_X_TO_M19
+#define TOK_ABS
+#define TOK_INT
+#define TOK_FRAC
+#define TOK_ASN
+#define TOK_ACS
+#define TOK_ATN
+#define TOK_Min10
+#define TOK_Min11
+#define TOK_Min12
+#define TOK_Min13
+#define TOK_Min14
+#define TOK_Min15
+#define TOK_Min16
+#define TOK_Min17
+#define TOK_Min18
+#define TOK_Min19
+#define TOK_X_POW_Y
+#define TOK_X_POW_RECIP_Y
+#define TOK_R_TO_P
+#define TOK_P_TO_R
+#define TOK_PERCENT
+#define TOK_SEXE
+#define TOK_MR10
+#define TOK_MR11
+#define TOK_MR12
+#define TOK_MR13
+#define TOK_MR14
+#define TOK_MR15
+#define TOK_MR16
+#define TOK_MR17
+#define TOK_MR18
+#define TOK_MR19
+#define TOK_GSB_IND0
+#define TOK_X_TO_Y
+#define TOK_SQR
+#define TOK_X_POW_2
+#define TOK_RECIP_X
+#define TOK_FACTORIAL
+#define TOK_M_MINUS_10
+#define TOK_M_MINUS_11
+#define TOK_M_MINUS_12
+#define TOK_M_MINUS_13
+#define TOK_M_MINUS_14
+#define TOK_M_MINUS_15
+#define TOK_M_MINUS_16
+#define TOK_M_MINUS_17
+#define TOK_M_MINUS_18
+#define TOK_M_MINUS_19
+#define TOK_DEG
+#define TOK_RAD
+#define TOK_GRA
+#define TOK_HYPSIN
+#define TOK_HYPCOS
+#define TOK_HYPTAN
+#define TOK_M_PLUS_10
+#define TOK_M_PLUS_11
+#define TOK_M_PLUS_12
+#define TOK_M_PLUS_13
+#define TOK_M_PLUS_14
+#define TOK_M_PLUS_15
+#define TOK_M_PLUS_16
+#define TOK_M_PLUS_17
+#define TOK_M_PLUS_18
+#define TOK_M_PLUS_19
+#define TOK_EA
+#define TOK_EB
+#define TOK_EC
+#define TOK_HYPASN
+#define TOK_HYPACS
+#define TOK_HYPATN
+#define TOK_X_TO_MF
+#define TOK_MinF
+#define TOK_MRF
+#define TOK_M_MINUS_F
+#define TOK_M_PLUS_F
+#define TOK_F5
+#define TOK_Min1F
+#define TOK_MR1F
+#define TOK_M_MINUS_1F
+#define TOK_M_PLUS_1F
+#define TOK_AC
+#define TOK_FB
+#define TOK_FC
+#define TOK_FD
+#define TOK_FE
+#define TOK_FF
