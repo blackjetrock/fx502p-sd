@@ -6,26 +6,133 @@
 // One token is executed
 // a break is seen (AC key)
 
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
 #include "fx502p_prog.h"
 
 typedef unsigned char uint8_t;
 
-void pfn_null(int token)
+//--------------------------------------------------------------------------------
+
+// Dump calculator state
+
+void dump_state(CALC_502_STATE *state)
 {
+  printf("\n");
+  printf("\nX:%f",   state->X);
+  printf("\nM0F:%f", state->M0F);
+  printf("\nM1F:%f", state->M1F);
+  printf("\nM00:%f", state->M00);
+  printf("\nM01:%f", state->M01);
+  printf("\nM02:%f", state->M02);
+  printf("\nM03:%f", state->M03);
+  printf("\nM04:%f", state->M04);
+  printf("\nM05:%f", state->M05);
+  printf("\nM06:%f", state->M06);
+  printf("\nM07:%f", state->M07);
+  printf("\nM08:%f", state->M08);
+  printf("\nM09:%f", state->M09);
+  printf("\nM10:%f", state->M10);
+  printf("\nM11:%f", state->M11);
+  printf("\nM12:%f", state->M12);
+  printf("\nM13:%f", state->M13);
+  printf("\nM14:%f", state->M14);
+  printf("\nM15:%f", state->M15);
+  printf("\nM16:%f", state->M16);
+  printf("\nM17:%f", state->M17);
+  printf("\nM18:%f", state->M18);
+  printf("\nM19:%f", state->M19);
+  printf("\n");  
+}
+
+
+void reset_state(CALC_502_STATE *state)
+{
+  state->X = 0.0;
+  state->M0F = 0.0;
+  state->M1F = 0.0;
+  state->M00 = 0.0;
+  state->M01 = 0.0;
+  state->M02 = 0.0;
+  state->M03 = 0.0;
+  state->M04 = 0.0;
+  state->M05 = 0.0;
+  state->M06 = 0.0;
+  state->M07 = 0.0;
+  state->M08 = 0.0;
+  state->M09 = 0.0;
+  state->M10 = 0.0;
+  state->M11 = 0.0;
+  state->M12 = 0.0;
+  state->M13 = 0.0;
+  state->M14 = 0.0;
+  state->M15 = 0.0;
+  state->M16 = 0.0;
+  state->M17 = 0.0;
+  state->M18 = 0.0;
+  state->M19 = 0.0;
+
+}
+
+
+//--------------------------------------------------------------------------------
+
+void pfn_null(CALC_502_STATE *state, int token)
+{
+}
+
+// Program N, do nothing much
+void pfn_prog(CALC_502_STATE *state, int token)
+{
+}
+
+void prog_digit(CALC_502_STATE *state, int token)
+{
+  int digval;
+
+  switch(token)
+    {
+    case TOK_0:
+    case TOK_1:
+    case TOK_2:
+    case TOK_3:
+      digval -= TOK_0;
+      break;
+
+    case TOK_4:
+    case TOK_5:
+    case TOK_6:
+    case TOK_7:
+    case TOK_8:
+    case TOK_9:
+      digval -= TOK_4;
+      break;
+
+    default:
+      printf("\nShould be a digit: %d", token);
+      break;
+    }
+  
+  // Add to the X register
+  state->X *= 10.0;
+  state->X += digval;
+  
 }
 
 TOKEN token_list[] =
   {
-    {"P0", 0x00, pfn_null},       
-    {"P1", 0x00, pfn_null},
-    {"P2", 0x00, pfn_null},
-    {"P3", 0x00, pfn_null},
-    {"P4", 0x00, pfn_null},
-    {"P5", 0x00, pfn_null},
-    {"P6", 0x00, pfn_null},
-    {"P7", 0x00, pfn_null},
-    {"P8", 0x00, pfn_null},
-    {"P9", 0x00, pfn_null},
+    {"P0", 0x00, pfn_prog},       
+    {"P1", 0x00, pfn_prog},
+    {"P2", 0x00, pfn_prog},
+    {"P3", 0x00, pfn_prog},
+    {"P4", 0x00, pfn_prog},
+    {"P5", 0x00, pfn_prog},
+    {"P6", 0x00, pfn_prog},
+    {"P7", 0x00, pfn_prog},
+    {"P8", 0x00, pfn_prog},
+    {"P9", 0x00, pfn_prog},
     {"0", 0x00, pfn_null},
     {"1", 0x00, pfn_null},
     {"2", 0x00, pfn_null},
@@ -275,10 +382,47 @@ TOKEN token_list[] =
 
   };
 
-void exec_prog(CALC_502_STATE *state, uint8_t token)
+////////////////////////////////////////////////////////////////////////////////
+//
+// Execute one token
+//
+
+void exec_token(CALC_502_STATE *state, uint8_t token, uint8_t *token_space)
 {
+
+  dump_state(state);
+  
   switch(token)
     {
+    case TOK_P0:
+    case TOK_P1:
+    case TOK_P2:
+    case TOK_P3:
+    case TOK_P4:
+    case TOK_P5:
+    case TOK_P6:
+    case TOK_P7:
+    case TOK_P8:
+    case TOK_P9:
+      // Do nothing, start of a program
+      break;
+
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+      if( state->X <9999999999 )
+	{
+	  state->X *= 10.0;
+	  state->X += digval;
+	}
+      break;
     }
   
 }
