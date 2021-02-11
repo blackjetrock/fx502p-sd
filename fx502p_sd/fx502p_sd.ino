@@ -2561,9 +2561,14 @@ void update_buttons()
 void setup() {
   int i;
 
-  sw.setTimeout_ms(40);
+  sw.setTxBuffer(swTxBuffer, sizeof(swTxBuffer));
+  sw.setRxBuffer(swRxBuffer, sizeof(swRxBuffer));
+  sw.setDelay_us(5);
+  
+  sw.setTimeout_ms(1000);
   sw.begin();
 
+  readInterval.start(2000, AsyncDelay::MILLIS);
 #if 1
   Serial.println(1.234e10);
   
