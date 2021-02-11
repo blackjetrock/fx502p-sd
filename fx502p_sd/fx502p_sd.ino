@@ -89,6 +89,15 @@ char swRxBuffer[16];
 
 AsyncDelay readInterval;
 
+// Clock variables
+
+int clock_day = 0;
+int clock_month = 0;
+int clock_year = 0;
+int clock_hour = 0;
+int clock_minute = 0;
+int clock_second = 0;
+
 // Macro to set up the first data bit (has to be done on previous clock edge
 // before sending the data
 
@@ -678,7 +687,8 @@ enum DISPLAY_PAGE
     DISPLAY_PAGE_TEXT     = 3,
     DISPLAY_PAGE_MEMORIES = 4,
     DISPLAY_PAGE_HELP     = 5,
-    DISPLAY_PROG_TOKENS   = 6,
+    DISPLAY_PAGE_TOKENS   = 6,
+    DISPLAY_PAGE_TIME     = 7,
   };
 
 boolean flag_graphics_clear = false;
@@ -1493,6 +1503,28 @@ void display_graphics()
     }
 }
 
+// Displays the current time, as a clok
+void display_time()
+{
+  char timeline[21];
+  
+  get_time();
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.setTextSize(2);
+  
+  sprintf(timeline, " %02d/%02d/%02d", clock_day, clock_month, clock_year);
+  display.println(timeline);
+
+  display.println();
+  sprintf(timeline, " %02d:%02d:%02d", clock_hour, clock_minute, clock_second);
+  display.println(timeline);
+  
+  display.display();
+  display.setTextSize(1);
+  
+}
+
 // Help display
 // Pages of useful info
 //
@@ -1526,30 +1558,41 @@ void dotkey_graphics_help()
   dotkey_handler = dotkey_text_help;
 }
 
+void display_help2()
+{
+  display.clearDisplay();
+  display.setCursor(0,0);
+  
+  display.println("    Display  Help   ");
+  display.println("1.7 E40 Time");
+  display.display();
+  
+  // Set up handler for next page
+  dotkey_handler = dotkey_graphics_help;
+}
+
 void display_help()
 {
   display.clearDisplay();
   display.setCursor(0,0);
   
-  display.println("                    ");
   display.println("    Display  Help   ");
   display.println("1.0 E40 Help");
   display.println("1.1 E40 Status");
   display.println("1.2 E40 Graphics");
   display.println("1.3 E40 Memory");
   display.println("1.4 E40 Text");
+  display.println("1.5 E40 Program List");
   display.println("         . Next Page");
   
   display.display();
   
   // Set up handler for next page
-  dotkey_handler = dotkey_graphics_help;
+  dotkey_handler = display_help2;
 }
+
 			      
 // Displays the stored programs as text
-			      
-
-
 
 void display_prog_core(int start)
 {
@@ -1739,30 +1782,6 @@ void printTwoDigit(int n)
 void readTime(void)
 {
 
-#if 0
-  DateTime now = RTC.now();
-    
-  Serial.print(now.year(), DEC);
-  Serial.print('/');
-  Serial.print(now.month(), DEC);
-  Serial.print('/');
-  Serial.print(now.day(), DEC);
-  Serial.print(' ');
-  Serial.print(now.hour(), DEC);
-  Serial.print(':');
-  Serial.print(now.minute(), DEC);
-  Serial.print(':');
-  Serial.print(now.second(), DEC);
-  Serial.println();
-    
-  Serial.print(" since midnight 1/1/1970 = ");
-  Serial.print(now.unixtime());
-  Serial.print("s = ");
-  Serial.print(now.unixtime() / 86400L);
-  Serial.println("d");
-
-#else
-  
   // Ensure register address is valid
   sw.beginTransmission(I2C_ADDRESS);
   sw.write(uint8_t(0)); // Access the first register
@@ -1842,7 +1861,106 @@ void readTime(void)
   Serial.print(':');
   printTwoDigit(second);
   Serial.println();
-#endif
+
+}
+
+// Gets time into global time variables
+
+void get_time(void)
+{
+
+  // Ensure register address is valid
+  sw.beginTransmission(I2C_ADDRESS);
+  sw.write(uint8_t(0)); // Access the first register
+  sw.endTransmission();
+
+  uint8_t registers[7]; // There are 7 registers we need to read from to get the date and time.
+  int numBytes = sw.requestFrom(I2C_ADDRESS, (uint8_t)NUM_BYTES);
+  
+  for (int i = 0; i < numBytes; ++i)
+    {
+      registers[i] = sw.read();
+    }
+  
+  if (numBytes != NUM_BYTES)
+    {
+      Serial.print("Read wrong number of bytes: ");
+      Serial.println((int)numBytes);
+      return;
+    }
+  
+  int tenYear = (registers[6] & 0xf0) >> 4;
+  int unitYear = registers[6] & 0x0f;
+  clock_year = (10 * tenYear) + unitYear;
+  
+  int tenMonth = (registers[5] & 0x10) >> 4;
+  int unitMonth = registers[5] & 0x0f;
+  clock_month = (10 * tenMonth) + unitMonth;
+  
+  int tenDateOfMonth = (registers[4] & 0x30) >> 4;
+  int unitDateOfMonth = registers[4] & 0x0f;
+  clock_day = (10 * tenDateOfMonth) + unitDateOfMonth;
+  
+  // Reading the hour is messy. See the datasheet for register details!
+  bool twelveHour = registers[2] & 0x40;
+  bool pm = false;
+  int unitHour;
+  int tenHour;
+  
+  if (twelveHour)
+    {
+      pm = registers[2] & 0x20;
+      tenHour = (registers[2] & 0x10) >> 4;
+    }
+  else
+    {
+      tenHour = (registers[2] & 0x30) >> 4;
+    }
+  
+  unitHour = registers[2] & 0x0f;
+  
+  clock_hour = (10 * tenHour) + unitHour;
+  if (twelveHour)
+    {
+      // 12h clock? Convert to 24h.
+      clock_hour += 12;
+    }
+  
+  int tenMinute = (registers[1] & 0xf0) >> 4;
+  int unitMinute = registers[1] & 0x0f;
+  clock_minute = (10 * tenMinute) + unitMinute;
+  
+  int tenSecond = (registers[0] & 0xf0) >> 4;
+  int unitSecond = registers[0] & 0x0f;
+  clock_second = (10 * tenSecond) + unitSecond;
+}
+
+// Sends the date to the RC, BCD format
+
+void put_date(int year_bcd, int month_bcd, int day_bcd)
+{
+  // Ensure register address is valid
+  sw.beginTransmission(I2C_ADDRESS);
+  sw.write(uint8_t(4)); // Access the first register
+  sw.write(uint8_t(day_bcd));
+  sw.write(uint8_t(month_bcd));
+  sw.write(uint8_t(year_bcd));
+  sw.endTransmission();
+
+}
+
+// Sends the time to the RTC, BCD format
+
+void put_time(int hour_bcd, int minute_bcd, int second_bcd)
+{
+  // Ensure register address is valid
+  sw.beginTransmission(I2C_ADDRESS);
+  sw.write(uint8_t(0)); // Access the first register
+  sw.write(uint8_t(second_bcd));
+  sw.write(uint8_t(minute_bcd));
+  sw.write(uint8_t(hour_bcd));
+  sw.endTransmission();
+
 }
 
 void cmd_clk(String cmd)
@@ -2785,8 +2903,12 @@ void update_display()
       display_memories();
       break;
 
-    case DISPLAY_PROG_TOKENS:
+    case DISPLAY_PAGE_TOKENS:
       display_prog();
+      break;
+
+    case DISPLAY_PAGE_TIME:
+      display_time();
       break;
 
     default:
@@ -2832,6 +2954,10 @@ void meta_check()
       // Set mem display flag to value of first digit
       switch(*(M0F+MEM_OFF_D1))
 	{
+	case '0':
+	  current_display = DISPLAY_PAGE_HELP;
+	  break;
+
 	case '1':
 	  current_display = DISPLAY_PAGE_STATUS;
 	  break;
@@ -2850,13 +2976,13 @@ void meta_check()
 	  break;
 
 	case '5':
-	  current_display = DISPLAY_PROG_TOKENS;
+	  current_display = DISPLAY_PAGE_TOKENS;
 	  break;
 
-	case '0':
-	  current_display = DISPLAY_PAGE_HELP;
+	case '6':
+	  current_display = DISPLAY_PAGE_TIME;
 	  break;
-	  
+
 	default:
 	  current_display = DISPLAY_PAGE_NONE;
 	  break;
@@ -2922,6 +3048,52 @@ void meta_check()
 	      
 	    }
 
+	  break;
+
+	default:
+	  break;
+	}
+	
+    }
+
+  // Time
+  // 1.0 E 42 : Read time
+  // 2.yymmdd E42 Set date
+  // 3.hhmmss E42 Set time
+  
+  if( strncmp(M0F+MEM_OFF_EXPONENT, "42", 2)==0 )
+    {
+      int i;
+      int year_bcd, month_bcd, day_bcd;
+      int hour_bcd, minute_bcd, second_bcd;
+      
+      switch(*(M0F+MEM_OFF_D0))
+	{
+	case '1':
+	  // Read date
+	  // After this is received, the date can be read using an
+	  // inv LOAD inv EXE
+	  //  or
+	  // inv LOAD EXE
+	  //
+	  // The date is in either the X register or the F memory
+	  // respectively.
+	  
+	  break;
+
+	  // Write date
+	case '3':
+	  year_bcd  = (*(M0F+MEM_OFF_D1)-'0')*16+(*(M0F+MEM_OFF_D2)-'0');
+	  month_bcd = (*(M0F+MEM_OFF_D3)-'0')*16+(*(M0F+MEM_OFF_D4)-'0');
+	  day_bcd   = (*(M0F+MEM_OFF_D5)-'0')*16+(*(M0F+MEM_OFF_D6)-'0');
+	  put_date(year_bcd, month_bcd, day_bcd);
+	  break;
+
+	case '4':
+	  hour_bcd   = (*(M0F+MEM_OFF_D1)-'0')*16+(*(M0F+MEM_OFF_D2)-'0');
+	  minute_bcd = (*(M0F+MEM_OFF_D3)-'0')*16+(*(M0F+MEM_OFF_D4)-'0');
+	  second_bcd = (*(M0F+MEM_OFF_D5)-'0')*16+(*(M0F+MEM_OFF_D6)-'0');
+	  put_time(hour_bcd, minute_bcd, second_bcd);
 	  break;
 
 	default:
