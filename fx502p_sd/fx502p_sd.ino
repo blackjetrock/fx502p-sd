@@ -23,7 +23,9 @@
 // and there's no delay when sending data words to or from the 502p.
 // This means loading and saving is faster than using the FA-1
 //
-// 
+// There is code in this sketch to set and read the time and date. This
+// uses a DS3231 RTC attached to the PC7 and PC6 GPIO lines on the gpio
+// connector J7. 
 
 #include <SPI.h>
 #include <SD.h>
@@ -540,6 +542,41 @@ struct
     
   };
 
+
+//--------------------------------------------------------------------------------
+//
+// Preset programs
+
+int preset_empty_mem[] =
+  {
+    0x00, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 
+  };
+  
 //--------------------------------------------------------------------------------
 
 const int MAX_BYTES = 20;
@@ -725,9 +762,13 @@ void but_ev_up();
 void but_ev_down();
 void but_ev_select();
 
+void get_time(void);
+void display_help();
 
 ////////////////////////////////////////////////////////////////////////////////
 // reverses a byte or nibble
+//
+
 int reverse(int x, int n)
 {
   int i;
@@ -761,11 +802,58 @@ int correct_parity_of(int byte)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-// get data byte from a data_words entry
+// Get data byte from a data_words entry
 
 int get_data_words_byte(int i)
 {
   return( reverse((data_words[i] & 0x7F80) >> 7, 8));
+}
+
+// Put a data byte in a data word
+
+void put_data_words_byte(int i, int byte)
+{
+  int parity = correct_parity_of(byte);
+#if 1
+  data_words[i] =
+    (reverse(byte, 8)   <<  7) |
+    (0      << 16) |
+    (0x3    <<  4) |
+    (parity <<  6) |
+    (0x0    <<  0);
+#endif
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Load a preset block of memory into the data words so it can be LOADed
+// by the calculator
+
+void load_preset(int *preset_data, int preset_length)
+{
+  int i;
+  Serial.println(preset_length);
+  
+  for(i=0; 10; i++)
+    {
+      put_data_words_byte(i, *(preset_data++));
+    }
+  Serial.println("done");
+}
+
+void load_preset_empty_mem()
+{
+  int i;
+
+  Serial.println(sizeof(preset_empty_mem));
+  
+  for(i=0; i<208; i++)
+    {
+      put_data_words_byte(i, preset_empty_mem[i]);
+    }
+  num_data_words = 208;
+  
+  Serial.println("done");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1503,7 +1591,7 @@ void display_graphics()
     }
 }
 
-// Displays the current time, as a clok
+// Displays the current time, as a clock
 void display_time()
 {
   char timeline[21];
@@ -1568,7 +1656,7 @@ void display_help2()
   display.display();
   
   // Set up handler for next page
-  dotkey_handler = dotkey_graphics_help;
+  dotkey_handler = display_time_help;
 }
 
 void display_help()
@@ -1589,6 +1677,24 @@ void display_help()
   
   // Set up handler for next page
   dotkey_handler = display_help2;
+}
+
+void display_time_help()
+{
+  display.clearDisplay();
+  display.setCursor(0,0);
+  
+  display.println("      Time Help   ");
+  
+  display.println("1.yymmdd E42 Get date");
+  display.println("2.yymmdd E42 Get time");
+  display.println("3.yymmdd E42 Set date");
+  display.println("4.yymmdd E42 Set time");
+  
+  display.display();
+  
+  // Set up handler for next page
+  dotkey_handler = dotkey_graphics_help;
 }
 
 			      
@@ -2914,7 +3020,6 @@ void update_display()
     default:
       break;
     }
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3079,6 +3184,69 @@ void meta_check()
 	  // The date is in either the X register or the F memory
 	  // respectively.
 	  
+	  // Load up an empty memory file
+	  load_preset_empty_mem();
+	  
+	  get_time();
+
+	  put_data_words_byte(2, 0x99);    // Exponent
+	  put_data_words_byte(6, (clock_year  % 10)*16);
+	  put_data_words_byte(7, (clock_month % 10)*16+(clock_year   / 10));
+	  put_data_words_byte(8, (clock_day   % 10)*16+(clock_month  / 10));
+	  put_data_words_byte(9,                       (clock_day    / 10));
+
+	  // Put date in memory 18
+	  put_data_words_byte(0x6A, 0x99);    // Exponent
+	  put_data_words_byte(0x6E, (clock_year  % 10)*16);
+	  put_data_words_byte(0x6F, (clock_month % 10)*16+(clock_year   / 10));
+	  put_data_words_byte(0x70, (clock_day   % 10)*16+(clock_month  / 10));
+	  put_data_words_byte(0x71,                       (clock_day    / 10));
+
+	  // Put time in memory 19
+	  put_data_words_byte(0x62, 0x99);    // Exponent
+	  put_data_words_byte(0x66, (clock_second   % 10)*16);
+	  put_data_words_byte(0x67, (clock_minute   % 10)*16+(clock_second  / 10));
+	  put_data_words_byte(0x68, (clock_hour     % 10)*16+(clock_minute  / 10));
+	  put_data_words_byte(0x69,                       (clock_hour       / 10));
+
+	  break;
+
+	case '2':
+	  // Read time
+	  // After this is received, the time can be read using an
+	  // inv LOAD inv EXE
+	  //  or
+	  // inv LOAD EXE
+	  //
+	  // The time is in either the X register or the F memory
+	  // respectively.
+	  
+	  // Load up an empty memory file
+	  load_preset_empty_mem();
+	  
+	  get_time();
+
+	  // Put time in X register/ M0F
+	  put_data_words_byte(2, 0x99);    // Exponent
+	  put_data_words_byte(6, (clock_second   % 10)*16);
+	  put_data_words_byte(7, (clock_minute   % 10)*16+(clock_second  / 10));
+	  put_data_words_byte(8, (clock_hour     % 10)*16+(clock_minute  / 10));
+	  put_data_words_byte(9,                       (clock_hour       / 10));
+
+	  // Put date in memory 18
+	  put_data_words_byte(0x6A, 0x99);    // Exponent
+	  put_data_words_byte(0x6E, (clock_year  % 10)*16);
+	  put_data_words_byte(0x6F, (clock_month % 10)*16+(clock_year   / 10));
+	  put_data_words_byte(0x70, (clock_day   % 10)*16+(clock_month  / 10));
+	  put_data_words_byte(0x71,                       (clock_day    / 10));
+
+	  // Put time in memory 19
+	  put_data_words_byte(0x62, 0x99);    // Exponent
+	  put_data_words_byte(0x66, (clock_second   % 10)*16);
+	  put_data_words_byte(0x67, (clock_minute   % 10)*16+(clock_second  / 10));
+	  put_data_words_byte(0x68, (clock_hour     % 10)*16+(clock_minute  / 10));
+	  put_data_words_byte(0x69,                       (clock_hour       / 10));
+
 	  break;
 
 	  // Write date
