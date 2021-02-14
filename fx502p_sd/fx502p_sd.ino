@@ -1869,6 +1869,44 @@ void display_memories()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+// Read the MPU6050 device
+//
+
+#define MPU6050_ADDRESS 0x68
+
+void read_6050()
+{
+  // Ensure register address is valid
+  sw.beginTransmission( MPU6050_ADDRESS);
+  sw.write(uint8_t(107)); // Power management
+  sw.write(uint8_t(0x20)); // sleep off, cycle on
+  sw.endTransmission();
+
+  sw.beginTransmission( MPU6050_ADDRESS);
+  sw.write(uint8_t(117)); // Access the first register
+  sw.endTransmission();
+  
+  uint8_t registers[14]; 
+  int numBytes = sw.requestFrom( MPU6050_ADDRESS, 5 );
+  
+  for (int i = 0; i < 14; ++i)
+    {
+      registers[i] = sw.read();
+    }
+  
+  //  Serial.println(numBytes);
+  
+  for(int i=0; i<14; i++)
+    {
+      Serial.print(registers[i], HEX);
+      Serial.println(" ");
+    }
+  
+  Serial.println("");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
 // Read the PCF8951 ADC/DAC
 //
 
@@ -2122,6 +2160,14 @@ void cmd_8951(String cmd)
   Serial.println("Done");
 }
 
+void cmd_6050(String cmd)
+{
+  Serial.println("Reading MPU6050...");
+
+  read_6050();
+  Serial.println("Done");
+}
+
 
 // Decode the data words
 void cmd_disp_mem(String cmd)
@@ -2175,6 +2221,7 @@ struct
   {
     {"clk",         cmd_clk},
     {"8951",        cmd_8951},
+    {"6050",        cmd_6050},
     {"mem",         cmd_disp_mem},
     {"m",           cmd_modify},
     {"c",           cmd_clear},
