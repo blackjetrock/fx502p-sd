@@ -1652,7 +1652,7 @@ void display_help2()
   display.setCursor(0,0);
   
   display.println("    Display  Help   ");
-  display.println("1.7 E40 Time");
+  display.println("1.6 E40 Time");
   display.display();
   
   // Set up handler for next page
@@ -1869,10 +1869,45 @@ void display_memories()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+// Read the PCF8951 ADC/DAC
+//
+
+#define PCF8951_ADDRESS 0x48
+
+void read_8951()
+{
+  // Ensure register address is valid
+  sw.beginTransmission( PCF8951_ADDRESS);
+  sw.write(uint8_t(4)); // Access the first register
+  sw.endTransmission();
+  
+  uint8_t registers[8]; 
+  int numBytes = sw.requestFrom( PCF8951_ADDRESS, 5 );
+  
+  for (int i = 0; i < 5; ++i)
+    {
+      registers[i] = sw.read();
+    }
+  
+  //  Serial.println(numBytes);
+  
+  for(int i=0; i<5; i++)
+    {
+      Serial.print(registers[i], HEX);
+      Serial.println(" ");
+    }
+  
+  Serial.println("");
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
 // Read the clock
 //
 //
 // Print with leading zero, as expected for time
+
 void printTwoDigit(int n)
 {
   if (n < 10) {
@@ -1890,7 +1925,7 @@ void readTime(void)
 
   // Ensure register address is valid
   sw.beginTransmission(I2C_ADDRESS);
-  sw.write(uint8_t(0)); // Access the first register
+  sw.write(uint8_t(0));
   sw.endTransmission();
 
   uint8_t registers[7]; // There are 7 registers we need to read from to get the date and time.
@@ -2069,10 +2104,22 @@ void put_time(int hour_bcd, int minute_bcd, int second_bcd)
 
 }
 
+
 void cmd_clk(String cmd)
 {
   Serial.println("Clock");
   readTime();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+
+void cmd_8951(String cmd)
+{
+  Serial.println("Reading PCF8951...");
+
+  read_8951();
+  Serial.println("Done");
 }
 
 
@@ -2127,6 +2174,7 @@ struct
 } cmdlist [] =
   {
     {"clk",         cmd_clk},
+    {"8951",        cmd_8951},
     {"mem",         cmd_disp_mem},
     {"m",           cmd_modify},
     {"c",           cmd_clear},
