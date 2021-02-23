@@ -734,6 +734,8 @@ enum DISPLAY_PAGE
 boolean flag_graphics_clear = false;
 int current_display = DISPLAY_PAGE_STATUS;
 
+boolean flag_print_on = false;
+
 int next_display_prog_start = 2;
 
 // Status display fields
@@ -1473,6 +1475,36 @@ char next_digit()
   return (dc);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+//
+// Is this a vaild memory?
+//
+
+boolean valid_memory_ma(int data_word_i)
+{
+  int i;
+  int j;
+  int exponent;
+  boolean retval = false;
+  
+  exponent = get_data_words_byte(data_word_i);
+  
+  switch(exponent)
+    {
+    case 0xFF:
+      retval = false;
+      break;
+      
+    default:
+      retval = true;
+      break;
+    }
+
+  return(retval);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Decodes a memory from binary form to text
 
 char *decode_memory(int data_word_i, boolean floating_point)
 {
@@ -1857,6 +1889,17 @@ void display_status()
   display.setCursor(0,0);
   display.print(status_sd_stat);
   display.print(" ");
+
+  if( flag_print_on )
+    {
+      display.print("PRT");
+    }
+  else
+    {
+      display.print("   ");
+    }
+  
+  display.print(" ");
   display.print(status_status);
   display.println();
   display.println(status_error);
@@ -1897,7 +1940,7 @@ void display_memories()
     {
       display.clearDisplay();
       display.setCursor(0,0);
-      
+
       for(int i=2; i<2+8*8;i+=MEMORY_LENGTH)
 	{
 	  sprintf(line, "%s:%s", memory_name((i-2)/MEMORY_LENGTH), decode_memory(i, false));
@@ -1905,6 +1948,73 @@ void display_memories()
 	}
       
       display.display();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Take the currently loaded file and if it is a memory format file, print it
+// to the printer (serial port)
+
+void print_file()
+{
+  char line[40];
+  int a = ((get_data_words_byte(0) & 0x0F) >> 0);
+  int b = ((get_data_words_byte(0) & 0xF0) >> 4);
+  int c = ((get_data_words_byte(1) & 0x0F) >> 0);
+  int d = ((get_data_words_byte(1) & 0xF0) >> 4);
+  
+  int filenum = a + b*10 + c*100;
+  int filetype = d;
+  char *filetype_s;
+  
+  switch(filetype)
+    {
+    case 15:
+      filetype_s = "Memory";
+      break;
+    case 11:
+      filetype_s = "Program";
+      break;
+    default:
+      filetype_s = "Unknown";
+      break;
+    }
+
+  // t's a program file, print the program
+  if( filetype == 11 )
+    {
+      display_prog_core(2, true);
+    }
+  
+  // It's a memory file, print memories
+  if( filetype == 15 )
+    {
+      serial_hdr.println("");
+      
+      for(int i=2; i<2+22*8;i+=MEMORY_LENGTH)
+	{
+	  if( !valid_memory_ma(i) )
+	    {
+	      break;
+	    }
+	  sprintf(line, "%s:%s", memory_name((i-2)/MEMORY_LENGTH), decode_memory(i, false));
+	  serial_hdr.println(line);
+	}
+      
+      serial_hdr.println("");
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// If print flag is on then print the current file
+
+void do_print()
+{
+  if( flag_print_on )
+    {
+      print_file();
     }
 }
 
@@ -2192,7 +2302,7 @@ void cmd_clk(String cmd)
 
 void cmd_print(String cmd)
 {
-  display_prog_core(2, true);
+  print_file();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2946,7 +3056,7 @@ void setup() {
 
   // Serial header
   serial_hdr.begin(9600);
-  serial_hdr.println("FX502P Gadget");
+  //  serial_hdr.println("FX502P Gadget");
 
   //  Wire2.begin();
 
@@ -3232,6 +3342,25 @@ void meta_check()
 
 	case '6':
 	  current_display = DISPLAY_PAGE_TIME;
+	  break;
+
+	case '7':
+	  switch(*(M0F+MEM_OFF_D2))
+	    {
+	    case '0':
+	      flag_print_on = false;
+	      break;
+
+	    case '1':
+	      flag_print_on = true;
+	      break;
+
+	    case '2':
+	      
+	      break;
+	    }
+	  
+
 	  break;
 
 	default:
@@ -3547,6 +3676,9 @@ void loop() {
 
 	  // Check for meta information
 	  meta_check();
+
+	  // Print if required
+	  do_print();
 	}
     }
 
