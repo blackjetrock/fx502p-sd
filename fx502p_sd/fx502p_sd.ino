@@ -33,7 +33,7 @@
 #include <SoftWire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-
+#include <SoftwareSerial.h>
 #if 0
 #include "../fx502p_prog_engine/fx502p_prog.h"
 #include "../fx502p_prog_engine/fx502p_prog.c"
@@ -79,6 +79,9 @@ typedef void (*CMD_FPTR)(String cmd);
 
 //TwoWire Wire2(PB11,PB10);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Software serial d=for RX/TX header
+SoftwareSerial serial_hdr(PA10, PA9); // RX, TX
 
 // Software I2C for the GPIO connector
 
@@ -1699,8 +1702,9 @@ void display_time_help()
 
 			      
 // Displays the stored programs as text
+// Can send output to serial header (printer)
 
-void display_prog_core(int start)
+void display_prog_core(int start, boolean serialhdr)
 {
   int i;
   int word, data;
@@ -1708,10 +1712,16 @@ void display_prog_core(int start)
   boolean nogap = false;
   int cursor_x = 0;
   int token_x = 0;
+
+  if( serialhdr )
+    {
+    }
+  else
+    {
+      display.clearDisplay();
+      display.setCursor(0,0);
+    }
   
-  display.clearDisplay();
-  display.setCursor(0,0);
-	  
   for(i= start; i<num_data_words; i++)
     {
 
@@ -1726,13 +1736,16 @@ void display_prog_core(int start)
       Serial.print("Y=");
       Serial.println(display.getCursorY());
       
-      if( (display.getCursorY() == 64) )
+      if( !serialhdr)
 	{
-	  next_display_prog_start = i;
-	  dotkey_handler = dotkey_display_prog;
-	  return;
+	  if( (display.getCursorY() == 64) )
+	    {
+	      next_display_prog_start = i;
+	      dotkey_handler = dotkey_display_prog;
+	      return;
+	    }
 	}
-
+      
       // Have we reached the end of tokens?
       if( data == 0xFF )
 	{
@@ -1742,7 +1755,14 @@ void display_prog_core(int start)
       
        if( token_table[data].flags & TF_NEWLINE )
 	{
-	  display.println("");
+	  if( serialhdr)
+	    {
+	      serial_hdr.println("");
+	    }
+	  else
+	    {
+	      display.println("");
+	    }
 	  Serial.println("");
 	}
 
@@ -1760,40 +1780,61 @@ void display_prog_core(int start)
 	}
 
        // Move to the next line if the token won't fit on this one
-       cursor_x = display.getCursorX();
-       token_x = 6*strlen(token_table[data].keyword);
-
-       if( (cursor_x + token_x) > 127 )
+       if( !serialhdr)
 	 {
-	   display.println("");
+	   cursor_x = display.getCursorX();
+	   token_x = 6*strlen(token_table[data].keyword);
+	   
+	   if( (cursor_x + token_x) > 127 )
+	     {
+	       display.println("");
+	     }
+	 }
+
+       if( serialhdr )
+	 {
+	   serial_hdr.print(token_table[data].keyword);
+	   
+	   if( !nogap)
+	     {
+	       serial_hdr.print(" ");
+	     }
+	 }
+       else
+	 {
+	   display.print(token_table[data].keyword);
+	   
+	   if( !nogap)
+	     {
+	       display.print(" ");
+	     }
 	 }
        
-      display.print(token_table[data].keyword);
-      if( !nogap)
-	{
-	  display.print(" ");
-	}
-      
       Serial.print(token_table[data].keyword);
       Serial.print("(");
       Serial.print(data, HEX);
       Serial.print(") ");
       
-      
       display.display();
     }
 
+  if( serialhdr)
+    {
+      serial_hdr.println("");
+      
+    }
+  
   dotkey_handler = display_prog;
 }
 
 void display_prog()
 {
-  display_prog_core(2);
+  display_prog_core(2, false);
 }
 
 void dotkey_display_prog()
 {
-  display_prog_core(next_display_prog_start);
+  display_prog_core(next_display_prog_start, false);
 }
 
 void display_text()
@@ -2149,6 +2190,11 @@ void cmd_clk(String cmd)
   readTime();
 }
 
+void cmd_print(String cmd)
+{
+  display_prog_core(2, true);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 
@@ -2220,6 +2266,7 @@ struct
 } cmdlist [] =
   {
     {"clk",         cmd_clk},
+    {"print",       cmd_print},
     {"8951",        cmd_8951},
     {"6050",        cmd_6050},
     {"mem",         cmd_disp_mem},
@@ -2896,7 +2943,11 @@ void setup() {
       sprintf(text_display_line[i], "                    ");
     }
 #endif
-  
+
+  // Serial header
+  serial_hdr.begin(9600);
+  serial_hdr.println("FX502P Gadget");
+
   //  Wire2.begin();
 
 #if ENABLE_OLED_SETUP
