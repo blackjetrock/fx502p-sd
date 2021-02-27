@@ -13,6 +13,13 @@ TOKEN_CODE prog1[] =
     TOK_1,
     TOK_0,
     TOK_EQUAL,
+    TOK_Min03,
+    TOK_MinF,
+    TOK_MR03,
+    TOK_TIMES,
+    TOK_MRF,
+    TOK_EQUAL,
+    TOK_Min1F
   };
 
 int main(int argc, char *argv[])
@@ -20,7 +27,8 @@ int main(int argc, char *argv[])
   FILE *fp;
   int c;
   char *token_file = "fpe.dat";
-
+  int i;
+  
   fp = fopen(token_file, "r");
 
   if( fp == NULL )
@@ -39,8 +47,19 @@ int main(int argc, char *argv[])
 
   CALC_502_STATE state;
 
-  reset_state(&state);
+  reset_state(&state, prog1, sizeof(prog1)/sizeof(TOKEN_CODE));
   state.X = 3;
+
+  for(;;)
+    {
+      exec_token(&state);
+
+      if( !state.prog_running )
+	{
+	  break;
+	}
+    }
+  
   dump_state(&state);
   
 }

@@ -6,47 +6,6 @@
 //
 // Token codes
 
-// State of the calculator
-// programs are applied to this structure when they execute
-
-typedef struct 
-{
-  float X;
-  float X_exponent;
-  float M0F;
-  float M1F;
-  float M00;
-  float M01;
-  float M02;
-  float M03;
-  float M04;
-  float M05;
-  float M06;
-  float M07;
-  float M08;
-  float M09;
-  float M10;
-  float M11;
-  float M12;
-  float M13;
-  float M14;
-  float M15;
-  float M16;
-  float M17;
-  float M18;
-  float M19;
-  
-} CALC_502_STATE;
-
-typedef void (*PROG_FN)(CALC_502_STATE *state, int token);
-
-typedef struct
-{
-  char *name;
-  int flags;
-  PROG_FN function;  
-} TOKEN;
-
 
 // Token codes
 typedef enum
@@ -307,8 +266,51 @@ typedef enum
     TOK_FD,
     TOK_FE,
     TOK_FF,
+    TOK_NONE
   } TOKEN_CODE;
 
+// State of the calculator
+// programs are applied to this structure when they execute
+
+typedef unsigned char uint8_t;
+typedef int boolean;
+#define false 0
+#define true (!false);
+
+#define NUM_MEMORIES 22
+
+#define INDEX_M0F 20
+#define INDEX_M1F 21
+
+#define FOR_EACH_MEMORY for(int i=0;i<NUM_MEMORIES;i++)
+
+typedef struct 
+{
+  float X;
+  float X_exponent;
+  float Y;
+  float Y_exponent;
+  float M[NUM_MEMORIES];
+  float M_exponent[NUM_MEMORIES];
+
+  TOKEN_CODE *program_space;    // The program area
+  TOKEN_CODE *next_token;       // Next token to execute
+  boolean     prog_running;     // true if program running
+  int         prog_steps_used;  // Number of steps used
+  boolean     entering_number;  // In proess of number entry in X if true
+  TOKEN_CODE  operator;         // Pending operator
+} CALC_502_STATE;
+
+typedef void (*PROG_FN)(CALC_502_STATE *state, int token);
+
+typedef struct
+{
+  char *name;
+  int flags;
+  PROG_FN function;  
+} TOKEN;
+
+
 void dump_state(CALC_502_STATE *state);
-void reset_state(CALC_502_STATE *state);
-void exec_token(CALC_502_STATE *state, uint8_t token, uint8_t *token_space);
+void reset_state(CALC_502_STATE *state, TOKEN_CODE *prog_space, int prog_steps);
+void exec_token(CALC_502_STATE *state);

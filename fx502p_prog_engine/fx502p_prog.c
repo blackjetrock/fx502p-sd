@@ -14,70 +14,6 @@
 
 typedef unsigned char uint8_t;
 
-//--------------------------------------------------------------------------------
-
-// Dump calculator state
-
-void dump_state(CALC_502_STATE *state)
-{
-  printf("\n");
-  printf("\nX:%f",   state->X);
-  printf("\nM0F:%f", state->M0F);
-  printf("\nM1F:%f", state->M1F);
-  printf("\nM00:%f", state->M00);
-  printf("\nM01:%f", state->M01);
-  printf("\nM02:%f", state->M02);
-  printf("\nM03:%f", state->M03);
-  printf("\nM04:%f", state->M04);
-  printf("\nM05:%f", state->M05);
-  printf("\nM06:%f", state->M06);
-  printf("\nM07:%f", state->M07);
-  printf("\nM08:%f", state->M08);
-  printf("\nM09:%f", state->M09);
-  printf("\nM10:%f", state->M10);
-  printf("\nM11:%f", state->M11);
-  printf("\nM12:%f", state->M12);
-  printf("\nM13:%f", state->M13);
-  printf("\nM14:%f", state->M14);
-  printf("\nM15:%f", state->M15);
-  printf("\nM16:%f", state->M16);
-  printf("\nM17:%f", state->M17);
-  printf("\nM18:%f", state->M18);
-  printf("\nM19:%f", state->M19);
-  printf("\n");  
-}
-
-
-void reset_state(CALC_502_STATE *state)
-{
-  state->X = 0.0;
-  state->M0F = 0.0;
-  state->M1F = 0.0;
-  state->M00 = 0.0;
-  state->M01 = 0.0;
-  state->M02 = 0.0;
-  state->M03 = 0.0;
-  state->M04 = 0.0;
-  state->M05 = 0.0;
-  state->M06 = 0.0;
-  state->M07 = 0.0;
-  state->M08 = 0.0;
-  state->M09 = 0.0;
-  state->M10 = 0.0;
-  state->M11 = 0.0;
-  state->M12 = 0.0;
-  state->M13 = 0.0;
-  state->M14 = 0.0;
-  state->M15 = 0.0;
-  state->M16 = 0.0;
-  state->M17 = 0.0;
-  state->M18 = 0.0;
-  state->M19 = 0.0;
-
-}
-
-
-//--------------------------------------------------------------------------------
 
 void pfn_null(CALC_502_STATE *state, int token)
 {
@@ -88,38 +24,34 @@ void pfn_prog(CALC_502_STATE *state, int token)
 {
 }
 
-void prog_digit(CALC_502_STATE *state, int token)
-{
-  int digval;
+//--------------------------------------------------------------------------------
 
-  switch(token)
-    {
-    case TOK_0:
-    case TOK_1:
-    case TOK_2:
-    case TOK_3:
-      digval -= TOK_0;
-      break;
+char *memory_name[NUM_MEMORIES] =
+  {
+    "M00",
+    "M01",
+    "M02",
+    "M03",
+    "M04",
+    "M05",
+    "M06",
+    "M07",
+    "M08",
+    "M09",
+    "M10",
+    "M11",
+    "M12",
+    "M13",
+    "M14",
+    "M15",
+    "M16",
+    "M17",
+    "M18",
+    "M19",
+    "M0F",
+    "M1F",
+  };
 
-    case TOK_4:
-    case TOK_5:
-    case TOK_6:
-    case TOK_7:
-    case TOK_8:
-    case TOK_9:
-      digval -= TOK_4;
-      break;
-
-    default:
-      printf("\nShould be a digit: %d", token);
-      break;
-    }
-  
-  // Add to the X register
-  state->X *= 10.0;
-  state->X += digval;
-  
-}
 
 TOKEN token_list[] =
   {
@@ -379,21 +311,396 @@ TOKEN token_list[] =
     {"?FD", 0x00, pfn_null},
     {"?FE", 0x00, pfn_null},
     {"?FF", 0x00, pfn_null},
+    {"NONE", 0x00, pfn_null},
 
   };
+
+char *token_name(TOKEN_CODE token)
+{
+  return(token_list[token].name);
+}
+
+//--------------------------------------------------------------------------------
+// returns numeric value of a number token
+
+int num_value_of(int token)
+{
+  int retval = 0;
+  
+  switch(token)
+    {
+    case TOK_0:
+      retval = 0;
+      break;
+    case TOK_1:
+      retval = 1;
+      break;
+    case TOK_2:
+      retval = 2;
+      break;
+    case TOK_3:
+      retval = 3;
+      break;
+    case TOK_4:
+      retval = 4;
+      break;
+    case TOK_5:
+      retval = 5;
+      break;
+    case TOK_6:
+      retval = 6;
+      break;
+    case TOK_7:
+      retval = 7;
+      break;
+    case TOK_8:
+      retval = 8;
+      break;
+    case TOK_9:
+      retval = 9;
+      break;
+    }
+  
+  return(retval);
+}
+
+//--------------------------------------------------------------------------------
+
+// Dump calculator state
+
+void dump_state(CALC_502_STATE *state)
+{
+  printf("\n");
+  printf("\nX:%f E%f",   state->X, state->X_exponent);
+  printf("\nY:%f E%f",   state->Y, state->Y_exponent);
+  FOR_EACH_MEMORY
+    printf("\n%s:%f E%f", memory_name[i], state->M[i], state->M_exponent[i]);
+  
+  printf("\nNumber of steps used: %d", state->prog_steps_used);
+  printf("\nNext token:           %s", token_name(*(state->next_token)));
+  printf("\nPending operator:     %s", token_name(state->operator));
+  printf("\nProgram running:      %d", state->prog_running);
+  printf("\nEntering number:      %d", state->entering_number);
+
+  
+  printf("\n");  
+}
+
+
+void reset_state(CALC_502_STATE *state, TOKEN_CODE *prog_space, int prog_steps)
+{
+  state->X = 0.0;
+  state->X_exponent = 0.0;
+  state->Y = 0.0;
+  state->Y_exponent = 0.0;
+  FOR_EACH_MEMORY
+    {
+      state->M[i] = 0.0;
+      state->M_exponent[i] = 0.0;
+    }
+
+  state->program_space = prog_space;
+  state->prog_running = false;
+  state->prog_steps_used = prog_steps;
+  state->next_token = prog_space;
+  state->entering_number = false;
+  state->operator = TOK_NONE;
+}
+
+//--------------------------------------------------------------------------------
+//
+// Convert memory action token to memory index
+
+int memory_token_to_index(TOKEN_CODE token)
+{
+  int retval;
+
+  switch(token)
+    {
+    case TOK_Min00:
+    case TOK_Min01:
+    case TOK_Min02:
+    case TOK_Min03:
+    case TOK_Min04:
+    case TOK_Min05:
+    case TOK_Min06:
+    case TOK_Min07:
+    case TOK_Min08:
+    case TOK_Min09:
+    case TOK_Min10:
+    case TOK_Min11:
+    case TOK_Min12:
+    case TOK_Min13:
+    case TOK_Min14:
+    case TOK_Min15:
+    case TOK_Min16:
+    case TOK_Min17:
+    case TOK_Min18:
+    case TOK_Min19:
+
+      retval = token - TOK_Min00;
+      break;
+
+    case TOK_X_TO_M00:
+    case TOK_X_TO_M01:
+    case TOK_X_TO_M02:
+    case TOK_X_TO_M03:
+    case TOK_X_TO_M04:
+    case TOK_X_TO_M05:
+    case TOK_X_TO_M06:
+    case TOK_X_TO_M07:
+    case TOK_X_TO_M08:
+    case TOK_X_TO_M09:
+    case TOK_X_TO_M10:
+    case TOK_X_TO_M11:
+    case TOK_X_TO_M12:
+    case TOK_X_TO_M13:
+    case TOK_X_TO_M14:
+    case TOK_X_TO_M15:
+    case TOK_X_TO_M16:
+    case TOK_X_TO_M17:
+    case TOK_X_TO_M18:
+    case TOK_X_TO_M19:
+      retval = token - TOK_X_TO_M00;
+      break;
+
+    case TOK_MR00:
+    case TOK_MR01:
+    case TOK_MR02:
+    case TOK_MR03:
+    case TOK_MR04:
+    case TOK_MR05:
+    case TOK_MR06:
+    case TOK_MR07:
+    case TOK_MR08:
+    case TOK_MR09:
+    case TOK_MR10:
+    case TOK_MR11:
+    case TOK_MR12:
+    case TOK_MR13:
+    case TOK_MR14:
+    case TOK_MR15:
+    case TOK_MR16:
+    case TOK_MR17:
+    case TOK_MR18:
+    case TOK_MR19:
+      retval = token - TOK_MR00;
+      break;
+      
+    case TOK_M_MINUS_00:
+    case TOK_M_MINUS_01:
+    case TOK_M_MINUS_02:
+    case TOK_M_MINUS_03:
+    case TOK_M_MINUS_04:
+    case TOK_M_MINUS_05:
+    case TOK_M_MINUS_06:
+    case TOK_M_MINUS_07:
+    case TOK_M_MINUS_08:
+    case TOK_M_MINUS_09:
+    case TOK_M_MINUS_10:
+    case TOK_M_MINUS_11:
+    case TOK_M_MINUS_12:
+    case TOK_M_MINUS_13:
+    case TOK_M_MINUS_14:
+    case TOK_M_MINUS_15:
+    case TOK_M_MINUS_16:
+    case TOK_M_MINUS_17:
+    case TOK_M_MINUS_18:
+    case TOK_M_MINUS_19:
+      retval = token - TOK_M_MINUS_00;
+      break;
+
+    case TOK_M_PLUS_00:
+    case TOK_M_PLUS_01:
+    case TOK_M_PLUS_02:
+    case TOK_M_PLUS_03:
+    case TOK_M_PLUS_04:
+    case TOK_M_PLUS_05:
+    case TOK_M_PLUS_06:
+    case TOK_M_PLUS_07:
+    case TOK_M_PLUS_08:
+    case TOK_M_PLUS_09:
+
+    case TOK_M_PLUS_10:
+    case TOK_M_PLUS_11:
+    case TOK_M_PLUS_12:
+    case TOK_M_PLUS_13:
+    case TOK_M_PLUS_14:
+    case TOK_M_PLUS_15:
+    case TOK_M_PLUS_16:
+    case TOK_M_PLUS_17:
+    case TOK_M_PLUS_18:
+    case TOK_M_PLUS_19:
+      retval = token - TOK_M_PLUS_00;
+      break;
+      
+    case TOK_X_TO_MF:
+    case TOK_MinF:
+    case TOK_MRF:
+    case TOK_M_MINUS_F:
+    case TOK_M_PLUS_F:
+      retval = INDEX_M0F;
+      break;
+      
+    case TOK_Min1F:
+    case TOK_MR1F:
+    case TOK_M_MINUS_1F:
+    case TOK_M_PLUS_1F:
+      retval = INDEX_M1F;
+      break;
+    }
+
+  return(retval);
+}
+
+//--------------------------------------------------------------------------------
+
+void prog_digit(CALC_502_STATE *state, int token)
+{
+  int digval;
+
+  switch(token)
+    {
+    case TOK_0:
+    case TOK_1:
+    case TOK_2:
+    case TOK_3:
+      digval -= TOK_0;
+      break;
+
+    case TOK_4:
+    case TOK_5:
+    case TOK_6:
+    case TOK_7:
+    case TOK_8:
+    case TOK_9:
+      digval -= TOK_4;
+      break;
+
+    default:
+      printf("\nShould be a digit: %d", token);
+      break;
+    }
+  
+  // Add to the X register
+  state->X *= 10.0;
+  state->X += digval;
+  
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Execute one token
 //
 
-void exec_token(CALC_502_STATE *state, uint8_t token, uint8_t *token_space)
+void exec_token(CALC_502_STATE *state)
 {
+  TOKEN_CODE token;
 
+  if( (state->next_token - state->program_space) > state->prog_steps_used )
+    {
+      state->prog_running = false;
+      return;
+    }
+  else
+    {
+      // We are running a program
+      state->prog_running = true;
+    }
+  
+  // Get next token to execute
+  token = *(state->next_token);
+
+  printf("\nToken:%d ", token);
+  
   dump_state(state);
   
   switch(token)
     {
+    case TOK_Min00:
+    case TOK_Min01:
+    case TOK_Min02:
+    case TOK_Min03:
+    case TOK_Min04:
+    case TOK_Min05:
+    case TOK_Min06:
+    case TOK_Min07:
+    case TOK_Min08:
+    case TOK_Min09:
+    case TOK_MinF:
+    case TOK_Min10:
+    case TOK_Min11:
+    case TOK_Min12:
+    case TOK_Min13:
+    case TOK_Min14:
+    case TOK_Min15:
+    case TOK_Min16:
+    case TOK_Min17:
+    case TOK_Min18:
+    case TOK_Min19:
+    case TOK_Min1F:
+      state->M[memory_token_to_index(token)] = state->X;
+      state->M_exponent[memory_token_to_index(token)] = state->X_exponent;
+      break;
+
+    case TOK_MR00:
+    case TOK_MR01:
+    case TOK_MR02:
+    case TOK_MR03:
+    case TOK_MR04:
+    case TOK_MR05:
+    case TOK_MR06:
+    case TOK_MR07:
+    case TOK_MR08:
+    case TOK_MR09:
+    case TOK_MRF:
+    case TOK_MR10:
+    case TOK_MR11:
+    case TOK_MR12:
+    case TOK_MR13:
+    case TOK_MR14:
+    case TOK_MR15:
+    case TOK_MR16:
+    case TOK_MR17:
+    case TOK_MR18:
+    case TOK_MR19:
+    case TOK_MR1F:
+      state->X          = state->M[memory_token_to_index(token)];
+      state->X_exponent = state->M_exponent[memory_token_to_index(token)];
+      
+      break;
+      
+    case TOK_TIMES:
+      // We move X into Y and flag that we aren't entering a number any more
+      state->Y = state->X;
+      state->Y_exponent = state->X_exponent;
+      state->entering_number = false;
+      state->operator = TOK_TIMES;
+      break;
+
+    case TOK_EQUAL:
+      // If entering a number we perform operator on X and Y
+      if( state->entering_number || (state->operator != TOK_NONE) )
+	{
+	  state->entering_number = false;
+	  switch(state->operator)
+	    {
+	    case TOK_TIMES:
+	      state->X = state->X * state->Y;
+	      break;
+	    }
+	  
+	}
+      else
+	{
+	  //Not entering a number, real calculator normalises display here
+	}
+
+      // Equals always stops number entry
+      state->entering_number = false;
+      break;
+      
     case TOK_P0:
     case TOK_P1:
     case TOK_P2:
@@ -407,22 +714,35 @@ void exec_token(CALC_502_STATE *state, uint8_t token, uint8_t *token_space)
       // Do nothing, start of a program
       break;
 
-    case 0:
-    case 1:
-    case 2:
-    case 3:
-    case 4:
-    case 5:
-    case 6:
-    case 7:
-    case 8:
-    case 9:
+    case TOK_0:
+    case TOK_1:
+    case TOK_2:
+    case TOK_3:
+    case TOK_4:
+    case TOK_5:
+    case TOK_6:
+    case TOK_7:
+    case TOK_8:
+    case TOK_9:
+      if( state->entering_number )
+	{
+	}
+      else
+	{
+	  // Not entering a number, clear X then enter number
+	  state->X = 0.0;
+	  state->X_exponent = 0.0;
+	}
+
+      // Add digit
       if( state->X <9999999999 )
 	{
 	  state->X *= 10.0;
-	  state->X += digval;
+	  state->X += num_value_of(token);
 	}
+      state->entering_number = true;
       break;
     }
-  
+
+  (state->next_token)++;
 }
