@@ -8,7 +8,7 @@
 
 
 // Token codes
-typedef enum
+enum
   {
     TOK_P0 = 0,
     TOK_P1,
@@ -267,13 +267,27 @@ typedef enum
     TOK_FE,
     TOK_FF,
     TOK_NONE
-  } TOKEN_CODE;
+  };
+
+// Operators
+enum
+  {
+    OP_NONE = 0,
+    OP_PLUS = 10,
+    OP_MINUS,
+    OP_DIVIDE,
+    OP_TIMES,
+  };
 
 // State of the calculator
 // programs are applied to this structure when they execute
 
 typedef unsigned char uint8_t;
+
+#ifndef ARDUINO
 typedef int boolean;
+#endif
+
 #define false 0
 #define true (!false);
 
@@ -286,19 +300,22 @@ typedef int boolean;
 
 typedef struct 
 {
-  float X;
-  float X_exponent;
-  float Y;
-  float Y_exponent;
-  float M[NUM_MEMORIES];
-  float M_exponent[NUM_MEMORIES];
+  double X;
+  double Y;
+  double M[NUM_MEMORIES];
 
-  TOKEN_CODE *program_space;    // The program area
-  TOKEN_CODE *next_token;       // Next token to execute
-  boolean     prog_running;     // true if program running
-  int         prog_steps_used;  // Number of steps used
-  boolean     entering_number;  // In proess of number entry in X if true
-  TOKEN_CODE  operator;         // Pending operator
+  int         *program_space;    // The program area
+  int         *next_token;       // Next token to execute
+  boolean     prog_running;      // true if program running
+  int         prog_steps_used;   // Number of steps used
+  int         entering_number;   // In progess of number entry in X if true
+  int         entering_exp;      // In progress of entering exponent
+  int         entering_frac;     // Entering fractional part
+  double      frac_mul;          // Used when entering frac
+  int         op;                // Pending operator
+  int         substate;          // Sub state
+  int         inv;               // Non zero if INV pending
+  int         mem_num;           // Memory number when entering
 } CALC_502_STATE;
 
 typedef void (*PROG_FN)(CALC_502_STATE *state, int token);
@@ -310,7 +327,18 @@ typedef struct
   PROG_FN function;  
 } TOKEN;
 
+// Sub states
+enum
+  {
+    SSTATE_NONE,
+    SSTATE_MIN_ENTER,
+    SSTATE_MR_ENTER,
+    SSTATE_X_TO_M,
+    SSTATE_M_PLUS,
+    SSTATE_M_MINUS,
+    
+  };
 
 void dump_state(CALC_502_STATE *state);
-void reset_state(CALC_502_STATE *state, TOKEN_CODE *prog_space, int prog_steps);
-void exec_token(CALC_502_STATE *state);
+void reset_state(CALC_502_STATE *state, int *prog_space, int prog_steps);
+void exec_token(CALC_502_STATE *state, int key_press);

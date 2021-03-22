@@ -22,6 +22,18 @@ TOKEN_CODE prog1[] =
     TOK_Min1F
   };
 
+TOKEN_CODE prog2[] =
+  {
+    TOK_P0,
+    TOK_4,
+    TOK_Min00,
+    TOK_LBL0,
+    TOK_1,
+    TOK_M_PLUS_01,
+    TOK_DSZ,
+    TOK_GOTO0,
+  };
+
 int main(int argc, char *argv[])
 {
   FILE *fp;
@@ -47,7 +59,9 @@ int main(int argc, char *argv[])
 
   CALC_502_STATE state;
 
-  reset_state(&state, prog1, sizeof(prog1)/sizeof(TOKEN_CODE));
+  //  reset_state(&state, prog1, sizeof(prog1)/sizeof(TOKEN_CODE));
+  reset_state(&state, prog2, sizeof(prog2)/sizeof(TOKEN_CODE));
+  
   state.X = 3;
 
   for(;;)

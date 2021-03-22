@@ -10,7 +10,9 @@
 #include <string.h>
 #include <stdlib.h>
 
+#ifndef ARDUINO
 #include "fx502p_prog.h"
+#endif
 
 typedef unsigned char uint8_t;
 
@@ -315,9 +317,42 @@ TOKEN token_list[] =
 
   };
 
-char *token_name(TOKEN_CODE token)
+char *token_name(int token)
 {
   return(token_list[token].name);
+}
+
+//--------------------------------------------------------------------------------
+//
+// Returns the operator corresponding to a token or key
+
+int token_to_op(int token)
+{
+  int rc = OP_NONE;
+
+  switch(token)
+    {
+    case TOK_DIVIDE:
+    case KEY_DIV:
+      rc = OP_DIVIDE;
+      break;
+    case TOK_MINUS:
+    case KEY_MINUS:
+      rc = OP_MINUS;
+      break;
+
+    case TOK_PLUS:
+    case KEY_PLUS:
+      rc = OP_PLUS;
+      break;
+
+    case TOK_TIMES:
+    case KEY_TIMES:
+      rc = OP_TIMES;
+      break;
+    }
+  
+  return(rc);
 }
 
 //--------------------------------------------------------------------------------
@@ -330,35 +365,46 @@ int num_value_of(int token)
   switch(token)
     {
     case TOK_0:
+    case KEY_0:
       retval = 0;
       break;
     case TOK_1:
+    case KEY_1:
       retval = 1;
       break;
     case TOK_2:
+    case KEY_2:
       retval = 2;
       break;
     case TOK_3:
+    case KEY_3:
       retval = 3;
       break;
     case TOK_4:
+    case KEY_4:
       retval = 4;
       break;
     case TOK_5:
+    case KEY_5:
       retval = 5;
       break;
     case TOK_6:
+    case KEY_6:
       retval = 6;
       break;
     case TOK_7:
+    case KEY_7:
       retval = 7;
       break;
     case TOK_8:
+    case KEY_8:
       retval = 8;
       break;
     case TOK_9:
+    case KEY_9:
       retval = 9;
       break;
+      
     }
   
   return(retval);
@@ -371,14 +417,14 @@ int num_value_of(int token)
 void dump_state(CALC_502_STATE *state)
 {
   printf("\n");
-  printf("\nX:%f E%f",   state->X, state->X_exponent);
-  printf("\nY:%f E%f",   state->Y, state->Y_exponent);
+  printf("\nX:%f",   state->X);
+  printf("\nY:%f",   state->Y);
   FOR_EACH_MEMORY
-    printf("\n%s:%f E%f", memory_name[i], state->M[i], state->M_exponent[i]);
+    printf("\n%s:%f", memory_name[i], state->M[i]);
   
   printf("\nNumber of steps used: %d", state->prog_steps_used);
   printf("\nNext token:           %s", token_name(*(state->next_token)));
-  printf("\nPending operator:     %s", token_name(state->operator));
+  printf("\nPending operator:     %s", token_name(state->op));
   printf("\nProgram running:      %d", state->prog_running);
   printf("\nEntering number:      %d", state->entering_number);
 
@@ -387,31 +433,33 @@ void dump_state(CALC_502_STATE *state)
 }
 
 
-void reset_state(CALC_502_STATE *state, TOKEN_CODE *prog_space, int prog_steps)
+void reset_state(CALC_502_STATE *state, int *prog_space, int prog_steps)
 {
   state->X = 0.0;
-  state->X_exponent = 0.0;
   state->Y = 0.0;
-  state->Y_exponent = 0.0;
   FOR_EACH_MEMORY
     {
       state->M[i] = 0.0;
-      state->M_exponent[i] = 0.0;
     }
 
-  state->program_space = prog_space;
-  state->prog_running = false;
-  state->prog_steps_used = prog_steps;
-  state->next_token = prog_space;
-  state->entering_number = false;
-  state->operator = TOK_NONE;
+  state->program_space      = prog_space;
+  state->prog_running       = false;
+  state->prog_steps_used    = prog_steps;
+  state->next_token         = prog_space;
+  state->entering_number    = 0;
+  state->entering_exp       = 0;
+  state->entering_frac      = 0;
+  state->op                 = TOK_NONE;
+  state->substate           = SSTATE_NONE;
+  state->inv                = 0;
+  state->mem_num            = 0;
 }
 
 //--------------------------------------------------------------------------------
 //
 // Convert memory action token to memory index
 
-int memory_token_to_index(TOKEN_CODE token)
+int memory_token_to_index(int token)
 {
   int retval;
 
@@ -554,6 +602,35 @@ int memory_token_to_index(TOKEN_CODE token)
 }
 
 //--------------------------------------------------------------------------------
+//
+// Finds the token corresponding to the one passed in
+//
+// e.g. LBL0   <-> GOTO0
+//
+
+int find_corresponding_token(int t)
+{
+  int retval = TOK_NONE;
+  
+  switch(t)
+    {
+    case TOK_GOTO0:
+    case TOK_GOTO1:
+    case TOK_GOTO2:
+    case TOK_GOTO3:
+    case TOK_GOTO4:
+    case TOK_GOTO5:
+    case TOK_GOTO6:
+    case TOK_GOTO7:
+    case TOK_GOTO8:
+    case TOK_GOTO9:
+      retval = (int)((int)t - (int)TOK_GOTO0) + (int)TOK_LBL0;
+    }
+
+  return(retval);
+}
+
+//--------------------------------------------------------------------------------
 
 void prog_digit(CALC_502_STATE *state, int token)
 {
@@ -593,31 +670,250 @@ void prog_digit(CALC_502_STATE *state, int token)
 //
 // Execute one token
 //
+// A token can either be a stored program token, or a key press
+// These two types of token have different number spaces
+//
 
-void exec_token(CALC_502_STATE *state)
+void exec_token(CALC_502_STATE *state, int key_press)
 {
-  TOKEN_CODE token;
-
-  if( (state->next_token - state->program_space) > state->prog_steps_used )
+  int token;
+  int label_token;
+  int *t;
+  int i;
+  double in, fr;
+  double temp;
+  
+  // Were we supplied with a keypress?
+  if( key_press != KEY_NONE )
     {
-      state->prog_running = false;
-      return;
+      token = key_press;
     }
   else
     {
-      // We are running a program
-      state->prog_running = true;
+      // Get the next token from the program
+      if( (state->next_token - state->program_space) > state->prog_steps_used )
+	{
+	  state->prog_running = false;
+	  return;
+	}
+      else
+	{
+	  // We are running a program
+	  state->prog_running = true;
+	}
+      
+      // Get next token to execute
+      token = *(state->next_token);
     }
   
-  // Get next token to execute
-  token = *(state->next_token);
+  //  printf("\nToken:%d ", token);
+  
+  // dump_state(state);
 
-  printf("\nToken:%d ", token);
-  
-  dump_state(state);
-  
+  // Some keypresses can be turned into tokens
+  if( state->inv )
+    {
+      if( token != KEY_INV )
+	{
+	  state->inv = 0;
+	}
+      
+      switch(token)
+	{
+	case KEY_OPBRA:
+	  token = TOK_INT;
+	  break;
+
+	case KEY_CLBRA:
+	  token = TOK_FRAC;
+	  break;
+	}
+    }
+
+  switch(state->substate)
+    {
+    case SSTATE_MIN_ENTER:
+    case SSTATE_X_TO_M:
+    case SSTATE_MR_ENTER:
+    case SSTATE_M_PLUS:
+    case SSTATE_M_MINUS:
+      switch(token)
+	{
+	case KEY_DOT:
+	  state->mem_num = 10;;
+	  break;
+
+	case TOK_0:
+	case TOK_1:
+	case TOK_2:
+	case TOK_3:
+	case TOK_4:
+	case TOK_5:
+	case TOK_6:
+	case TOK_7:
+	case TOK_8:
+	case TOK_9:
+	  
+	case KEY_0:
+	case KEY_1:
+	case KEY_2:
+	case KEY_3:
+	case KEY_4:
+	case KEY_5:
+	case KEY_6:
+	case KEY_7:
+	case KEY_8:
+	case KEY_9:
+
+	  if( token == KEY_EXP )
+	    {
+	      if( state->mem_num == 10 )
+		{
+		  state->mem_num = INDEX_M1F;;
+		}
+	      else
+		{
+		  state->mem_num = INDEX_M0F;;
+		}
+	    }
+	  else
+	    {
+	      state->mem_num = state->mem_num * 10 + num_value_of(token);
+	    }
+	  
+	  switch(state->substate)
+	    {
+	    case SSTATE_MIN_ENTER:
+	      state->M[state->mem_num] = state->X;
+	      break;
+
+	    case SSTATE_X_TO_M:
+	      temp = state->M[state->mem_num];
+	      state->M[state->mem_num] = state->X;
+	      state->X = temp;
+	      break;
+	      
+	    case SSTATE_MR_ENTER:
+	      state->X = state->M[state->mem_num];
+	      break;
+
+	    case SSTATE_M_PLUS:
+	      state->M[state->mem_num] = state->M[state->mem_num] + state->X;
+	      break;
+
+	    case SSTATE_M_MINUS:
+	      state->M[state->mem_num] = state->M[state->mem_num] - state->X;
+	      break;
+	    }
+
+	  Serial.print("Mem access:");
+	  Serial.println(state->mem_num);
+	  
+	  token = KEY_NONE;
+	  state->mem_num = 0;
+	  state->substate = SSTATE_NONE;
+	  break;
+	}
+      break;
+
+    case SSTATE_NONE:
+      Serial.println("SSTATE_NONE");
+      switch(token)
+	{
+	case KEY_MIN:
+	  state->substate = SSTATE_MIN_ENTER;
+	  break;
+	  
+	case KEY_MR:
+	  state->substate = SSTATE_MR_ENTER;
+	  break;
+
+	case KEY_MPLU:
+	  state->substate = SSTATE_M_PLUS;
+	  break;
+
+	case KEY_MMIN:
+	  state->substate = SSTATE_M_MINUS;
+	  break;
+
+	case KEY_X_M:
+	  state->substate = SSTATE_X_TO_M;
+	  break;
+	}
+    }
+
   switch(token)
     {
+
+    case KEY_INV:
+      state->inv = !(state->inv);
+      break;
+      
+      
+    case TOK_FRAC:
+      state->X = modf(state->X, &in);
+      break;
+
+    case TOK_INT:
+      modf(state->X, &in);
+      state->X = in;
+      break;
+      
+    case KEY_MODE:
+      break;
+      
+    case KEY_SIN:
+    case TOK_SIN:
+      state->X = sin(state->X);
+      break;
+
+    case KEY_COS:
+    case TOK_COS:
+      state->X = cos(state->X);
+      break;
+      
+    case KEY_TAN:
+    case TOK_TAN:
+      state->X = tan(state->X);
+      break;
+      
+    case TOK_GOTO0:
+    case TOK_GOTO1:
+    case TOK_GOTO2:
+    case TOK_GOTO3:
+    case TOK_GOTO4:
+    case TOK_GOTO5:
+    case TOK_GOTO6:
+    case TOK_GOTO7:
+    case TOK_GOTO8:
+    case TOK_GOTO9:
+      
+      label_token = find_corresponding_token(token);
+      
+      // Search for the given label
+      for(i=0, t=state->program_space; i<state->prog_steps_used; i++, t++)
+	{
+	  if( *t == label_token )
+	    {
+	      // Found it
+	      state->next_token = t;
+	      break;
+	    }
+
+	  // Not found, just carry on
+	}
+      break;
+
+    case TOK_DSZ:
+      state->M[0] = state->M[0]-1.0;
+
+      if( state->M[0] == 0.0 )
+	{
+	  (state->next_token)++;
+	}
+      
+      break;
+      
     case TOK_Min00:
     case TOK_Min01:
     case TOK_Min02:
@@ -641,7 +937,6 @@ void exec_token(CALC_502_STATE *state)
     case TOK_Min19:
     case TOK_Min1F:
       state->M[memory_token_to_index(token)] = state->X;
-      state->M_exponent[memory_token_to_index(token)] = state->X_exponent;
       break;
 
     case TOK_MR00:
@@ -667,27 +962,32 @@ void exec_token(CALC_502_STATE *state)
     case TOK_MR19:
     case TOK_MR1F:
       state->X          = state->M[memory_token_to_index(token)];
-      state->X_exponent = state->M_exponent[memory_token_to_index(token)];
-      
       break;
       
-    case TOK_TIMES:
-      // We move X into Y and flag that we aren't entering a number any more
-      state->Y = state->X;
-      state->Y_exponent = state->X_exponent;
-      state->entering_number = false;
-      state->operator = TOK_TIMES;
-      break;
 
     case TOK_EQUAL:
+    case KEY_EQ:
       // If entering a number we perform operator on X and Y
-      if( state->entering_number || (state->operator != TOK_NONE) )
+      if( state->entering_number || (state->op != TOK_NONE) )
 	{
 	  state->entering_number = false;
-	  switch(state->operator)
+	  state->entering_frac = 0;
+	  switch(state->op)
 	    {
-	    case TOK_TIMES:
+	    case OP_MINUS:
+	      state->X = state->Y - state->X;
+	      break;
+
+	    case OP_DIVIDE:
+	      state->X = state->Y / state->X;
+	      break;
+
+	    case OP_TIMES:
 	      state->X = state->X * state->Y;
+	      break;
+	      
+	    case OP_PLUS:
+	      state->X = state->X + state->Y;
 	      break;
 	    }
 	  
@@ -699,6 +999,8 @@ void exec_token(CALC_502_STATE *state)
 
       // Equals always stops number entry
       state->entering_number = false;
+      state->entering_exp = false;
+      state->entering_frac = 0;
       break;
       
     case TOK_P0:
@@ -714,6 +1016,54 @@ void exec_token(CALC_502_STATE *state)
       // Do nothing, start of a program
       break;
 
+    case TOK_TIMES:
+    case KEY_TIMES:
+    case TOK_PLUS:
+    case KEY_PLUS:
+    case TOK_DIVIDE:
+    case KEY_DIV:
+    case TOK_MINUS:
+    case KEY_MINUS:
+      // Not entering any more, and we have a pending operator
+      state->entering_number = false;
+      state->entering_exp = false;
+      state->entering_frac = 0;
+      state->Y = state->X;
+      state->X = 0.0;
+      state->op = token_to_op(token);
+      break;
+
+    case TOK_AC:
+    case KEY_AC:
+      state->entering_number = false;
+      state->entering_exp = false;
+      state->entering_frac = 0;
+      state->X = 0.0;
+      break;
+      
+    case KEY_EXP:
+    case TOK_EXP:
+      if( state->entering_number )
+	{
+	  // Now entering exponent
+	  state->entering_exp = true;
+	  state->entering_frac = 0;
+	}
+      else
+	{
+	  // Enter PI
+	  state->X = 3.141592653;
+	}
+      
+
+      break;
+
+    case TOK_DOT:
+    case KEY_DOT:
+      state->entering_frac = 1;
+      state->frac_mul = 0.1;
+      break;
+      
     case TOK_0:
     case TOK_1:
     case TOK_2:
@@ -724,6 +1074,18 @@ void exec_token(CALC_502_STATE *state)
     case TOK_7:
     case TOK_8:
     case TOK_9:
+
+    case KEY_0:
+    case KEY_1:
+    case KEY_2:
+    case KEY_3:
+    case KEY_4:
+    case KEY_5:
+    case KEY_6:
+    case KEY_7:
+    case KEY_8:
+    case KEY_9:
+
       if( state->entering_number )
 	{
 	}
@@ -731,16 +1093,27 @@ void exec_token(CALC_502_STATE *state)
 	{
 	  // Not entering a number, clear X then enter number
 	  state->X = 0.0;
-	  state->X_exponent = 0.0;
 	}
 
-      // Add digit
-      if( state->X <9999999999 )
+      if( state->entering_frac )
 	{
-	  state->X *= 10.0;
-	  state->X += num_value_of(token);
+	  state->X += num_value_of(token) * state->frac_mul;
+	  state->frac_mul /= 10.0;
 	}
-      state->entering_number = true;
+      else  if( state->entering_exp )
+	{
+
+	}
+      else
+	{
+	  // Add digit
+	  if( state->X < 9999999999 )
+	    {
+	      state->X *= 10.0;
+	      state->X += num_value_of(token);
+	    }
+	  state->entering_number = true;
+	}
       break;
     }
 
