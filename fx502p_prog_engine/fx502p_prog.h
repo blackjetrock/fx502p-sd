@@ -303,7 +303,7 @@ typedef struct
   double X;
   double Y;
   double M[NUM_MEMORIES];
-
+  int         mode;              // The major mode the calculator is in
   int         *program_space;    // The program area
   int         *next_token;       // Next token to execute
   boolean     prog_running;      // true if program running
@@ -327,6 +327,14 @@ typedef struct
   PROG_FN function;  
 } TOKEN;
 
+// Major modes
+enum
+  {
+    MMODE_RUN,
+    MMODE_WRT,
+    MMODE_PCL,
+  };
+
 // Sub states
 enum
   {
@@ -336,6 +344,7 @@ enum
     SSTATE_X_TO_M,
     SSTATE_M_PLUS,
     SSTATE_M_MINUS,
+    SSTATE_MODE_ENTER,
     
   };
 

@@ -453,6 +453,7 @@ void reset_state(CALC_502_STATE *state, int *prog_space, int prog_steps)
   state->substate           = SSTATE_NONE;
   state->inv                = 0;
   state->mem_num            = 0;
+  state->mode               = MMODE_RUN;
 }
 
 //--------------------------------------------------------------------------------
@@ -732,6 +733,26 @@ void exec_token(CALC_502_STATE *state, int key_press)
 
   switch(state->substate)
     {
+    case SSTATE_MODE_ENTER:
+      switch(token)
+	{
+	case KEY_1:
+	  state->mode = MMODE_RUN;
+	  state->substate = SSTATE_NONE;
+	  break;
+
+	case KEY_2:
+	  state->mode = MMODE_WRT;
+	  state->substate = SSTATE_NONE;
+	  break;
+
+	case KEY_3:
+	  state->mode = MMODE_PCL;
+	  state->substate = SSTATE_NONE;
+	  break;
+	}
+      break;
+      
     case SSTATE_MIN_ENTER:
     case SSTATE_X_TO_M:
     case SSTATE_MR_ENTER:
@@ -860,6 +881,7 @@ void exec_token(CALC_502_STATE *state, int key_press)
       break;
       
     case KEY_MODE:
+      state->substate = SSTATE_MODE_ENTER;;
       break;
       
     case KEY_SIN:
