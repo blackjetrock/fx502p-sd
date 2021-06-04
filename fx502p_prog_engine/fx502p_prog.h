@@ -298,9 +298,12 @@ typedef int boolean;
 
 #define FOR_EACH_MEMORY for(int i=0;i<NUM_MEMORIES;i++)
 
+#define X_STR_LEN 30
+
 typedef struct 
 {
   double X;
+  char Xstr[X_STR_LEN];
   double Y;
   double M[NUM_MEMORIES];
   int         mode;              // The major mode the calculator is in
@@ -316,6 +319,8 @@ typedef struct
   int         substate;          // Sub state
   int         inv;               // Non zero if INV pending
   int         mem_num;           // Memory number when entering
+  int         update_result;     // Non zero causes X to be built in Xstr
+  int         prog_editing;      // Number of program we are editing in wrt mode
 } CALC_502_STATE;
 
 typedef void (*PROG_FN)(CALC_502_STATE *state, int token);
@@ -335,6 +340,9 @@ enum
     MMODE_PCL,
   };
 
+// No program
+#define PROG_NO_PROG (-1)
+
 // Sub states
 enum
   {
@@ -344,7 +352,10 @@ enum
     SSTATE_X_TO_M,
     SSTATE_M_PLUS,
     SSTATE_M_MINUS,
-    SSTATE_MODE_ENTER,
+    SSTATE_MODE_ENTER,    // Waiting for mode number
+    SSTATE_WRT_FRONT,     // Front page of WRT mode
+    SSTATE_WRT_DISP_PROG, // Display program in WRT mode
+    SSTATE_PCL_FRONT,     // Front page of PCL mode
     
   };
 

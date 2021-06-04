@@ -322,6 +322,60 @@ char *token_name(int token)
   return(token_list[token].name);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+//
+// Given a token, returns the program number
+//
+
+int token_to_prognum(int token)
+{
+  int rc = PROG_NO_PROG;
+  
+  switch(token)
+    {
+    case TOK_P0:
+      rc = 0;
+      break;
+    case TOK_P1:
+      rc = 1;
+      break;
+      
+    case TOK_P2:
+      rc = 2;
+      break;
+      
+    case TOK_P3:
+      rc = 3;
+      break;
+      
+    case TOK_P4:
+      rc = 4;
+      break;
+      
+    case TOK_P5:
+      rc = 5;
+      break;
+      
+    case TOK_P6:
+      rc = 6;
+      break;
+      
+    case TOK_P7:
+      rc = 7;
+      break;
+      
+    case TOK_P8:
+      rc = 8;
+      break;
+      
+    case TOK_P9:
+      rc = 9;
+      break;
+      
+    }
+  
+  return(rc);
+}
 //--------------------------------------------------------------------------------
 //
 // Returns the operator corresponding to a token or key
@@ -454,6 +508,8 @@ void reset_state(CALC_502_STATE *state, int *prog_space, int prog_steps)
   state->inv                = 0;
   state->mem_num            = 0;
   state->mode               = MMODE_RUN;
+  state->update_result      = 0;
+  state->prog_editing       = PROG_NO_PROG;
 }
 
 //--------------------------------------------------------------------------------
@@ -666,6 +722,172 @@ void prog_digit(CALC_502_STATE *state, int token)
   
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+void all_clear(CALC_502_STATE *state)
+{
+  state->entering_number = false;
+  state->entering_exp = false;
+  state->entering_frac = 0;
+  state->X = 0.0;
+  strcpy(state->Xstr, "                    ");
+  state->update_result = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// WRT Mode
+//
+// This mode does not execute any keypresses, it just manages the programs
+// in the program space
+//
+// The tokens in the space are the sme as the 502p tokens, so hopefully we
+// should be able to execute programs saved from the 502p.
+
+void mode_wrt(CALC_502_STATE *state, int keypress)
+{
+  int token = keypress;
+  
+  // We have to handle INV
+#if 0
+  if( state->inv )
+    {
+      if( token != KEY_INV )
+	{
+	  state->inv = 0;
+	}
+    }
+#endif
+  
+  switch(token)
+    {
+    case KEY_INV:
+      state->inv = !(state->inv);
+      break;
+
+    case KEY_MODE:
+      state->substate = SSTATE_MODE_ENTER;;
+      break;
+      
+    }
+
+    switch(state->substate)
+    {
+    case SSTATE_MODE_ENTER:
+      switch(token)
+	{
+	case KEY_1:
+	  state->mode = MMODE_RUN;
+	  state->substate = SSTATE_NONE;
+	  all_clear(state);
+	  break;
+
+	case KEY_2:
+	  state->mode = MMODE_WRT;
+	  state->substate = SSTATE_WRT_FRONT;
+	  sprintf(state->Xstr, program_index(state));
+	  break;
+
+	case KEY_3:
+	  state->mode = MMODE_PCL;
+	  state->substate = SSTATE_PCL_FRONT;
+	  break;
+	}
+      break;
+    }
+
+    // We convert some keycodes to tokens
+    switch(token)
+      {
+      case KEY_P0:
+	if(state->inv)
+	  {
+	    token = TOK_P5;
+	  }
+	else
+	  {
+	    token = TOK_P0;
+	  }
+	break;
+	
+      case KEY_P1:
+	if(state->inv)
+	  {
+	    token = TOK_P6;
+	  }
+	else
+	  {
+	    token = TOK_P1;
+	  }
+	break;
+
+      case KEY_P2:
+	if(state->inv)
+	  {
+	    token = TOK_P7;
+	  }
+	else
+	  {
+	    token = TOK_P2;
+	  }
+
+	break;
+
+      case KEY_P3:
+	if(state->inv)
+	  {
+	    token = TOK_P8;
+	  }
+	else
+	  {
+	    token = TOK_P3;
+	  }
+	break;
+
+      case KEY_P4:
+	if(state->inv)
+	  {
+	    token = TOK_P9;
+	  }
+	else
+	  {
+	    token = TOK_P4;
+	  }
+	break;
+      }
+    
+    switch(state->substate)
+      {
+	// When displaying a program the current step is last on the screen
+	// We decode instructions, so don't use the 502 codes, because we have
+	// a full screen to do it with.
+      case SSTATE_WRT_DISP_PROG:
+	
+	break;
+	
+      case SSTATE_WRT_FRONT:
+	switch(token)
+	  {
+	  case TOK_P0:
+	  case TOK_P1:
+	  case TOK_P2:
+	  case TOK_P3:
+	  case TOK_P4:
+	  case TOK_P5:
+	  case TOK_P6:
+	  case TOK_P7:
+	  case TOK_P8:
+	  case TOK_P9:
+	    state->prog_editing = token_to_prognum(token);
+	    
+	    break;
+	  }
+	
+	break;
+      }
+}
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -706,7 +928,26 @@ void exec_token(CALC_502_STATE *state, int key_press)
       // Get next token to execute
       token = *(state->next_token);
     }
-  
+
+  // The WRT and PCL modes have completely different operation so they are processed here
+  switch(state->mode)
+    {
+    case MMODE_WRT:
+      mode_wrt(state, token);
+      break;
+
+    case MMODE_PCL:
+      switch(state->substate)
+	{
+	case SSTATE_PCL_FRONT:
+	  sprintf(state->Xstr, program_index(state));
+	  state->update_result = 1;
+	  break;
+	}
+      break;
+
+    }
+    
   //  printf("\nToken:%d ", token);
   
   // dump_state(state);
@@ -743,12 +984,12 @@ void exec_token(CALC_502_STATE *state, int key_press)
 
 	case KEY_2:
 	  state->mode = MMODE_WRT;
-	  state->substate = SSTATE_NONE;
+	  state->substate = SSTATE_WRT_FRONT;
 	  break;
 
 	case KEY_3:
 	  state->mode = MMODE_PCL;
-	  state->substate = SSTATE_NONE;
+	  state->substate = SSTATE_PCL_FRONT;
 	  break;
 	}
       break;
@@ -812,10 +1053,12 @@ void exec_token(CALC_502_STATE *state, int key_press)
 	      temp = state->M[state->mem_num];
 	      state->M[state->mem_num] = state->X;
 	      state->X = temp;
+	      state->update_result = 1;
 	      break;
 	      
 	    case SSTATE_MR_ENTER:
 	      state->X = state->M[state->mem_num];
+	      state->update_result = 1;
 	      break;
 
 	    case SSTATE_M_PLUS:
@@ -861,6 +1104,7 @@ void exec_token(CALC_502_STATE *state, int key_press)
 	  state->substate = SSTATE_X_TO_M;
 	  break;
 	}
+
     }
 
   switch(token)
@@ -873,11 +1117,13 @@ void exec_token(CALC_502_STATE *state, int key_press)
       
     case TOK_FRAC:
       state->X = modf(state->X, &in);
+      state->update_result = 1;
       break;
 
     case TOK_INT:
       modf(state->X, &in);
       state->X = in;
+      state->update_result = 1;
       break;
       
     case KEY_MODE:
@@ -887,16 +1133,19 @@ void exec_token(CALC_502_STATE *state, int key_press)
     case KEY_SIN:
     case TOK_SIN:
       state->X = sin(state->X);
+      state->update_result = 1;
       break;
 
     case KEY_COS:
     case TOK_COS:
       state->X = cos(state->X);
+      state->update_result = 1;
       break;
       
     case KEY_TAN:
     case TOK_TAN:
       state->X = tan(state->X);
+      state->update_result = 1;
       break;
       
     case TOK_GOTO0:
@@ -985,7 +1234,12 @@ void exec_token(CALC_502_STATE *state, int key_press)
     case TOK_MR1F:
       state->X          = state->M[memory_token_to_index(token)];
       break;
-      
+
+    case TOK_PLUSMINUS:
+    case KEY_PLMIN:
+      state->X = -state->X;
+      state->update_result = 1;
+      break;
 
     case TOK_EQUAL:
     case KEY_EQ:
@@ -1020,6 +1274,7 @@ void exec_token(CALC_502_STATE *state, int key_press)
 	}
 
       // Equals always stops number entry
+      state->update_result = 1;
       state->entering_number = false;
       state->entering_exp = false;
       state->entering_frac = 0;
@@ -1057,10 +1312,7 @@ void exec_token(CALC_502_STATE *state, int key_press)
 
     case TOK_AC:
     case KEY_AC:
-      state->entering_number = false;
-      state->entering_exp = false;
-      state->entering_frac = 0;
-      state->X = 0.0;
+      all_clear(state);
       break;
       
     case KEY_EXP:
@@ -1075,6 +1327,7 @@ void exec_token(CALC_502_STATE *state, int key_press)
 	{
 	  // Enter PI
 	  state->X = 3.141592653;
+	  state->update_result = 1;
 	}
       
 
@@ -1084,6 +1337,7 @@ void exec_token(CALC_502_STATE *state, int key_press)
     case KEY_DOT:
       state->entering_frac = 1;
       state->frac_mul = 0.1;
+      strcat(state->Xstr, ".");
       break;
       
     case TOK_0:
@@ -1115,8 +1369,11 @@ void exec_token(CALC_502_STATE *state, int key_press)
 	{
 	  // Not entering a number, clear X then enter number
 	  state->X = 0.0;
+	  strcpy(state->Xstr, "0");
 	}
 
+      strcat(state->Xstr, get_keysym(token));
+	     
       if( state->entering_frac )
 	{
 	  state->X += num_value_of(token) * state->frac_mul;
