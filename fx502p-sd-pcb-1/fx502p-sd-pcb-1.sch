@@ -44,7 +44,7 @@ $EndComp
 Wire Wire Line
 	9850 5000 9850 5150
 $Comp
-L Microtan_65_CPU-cache:GND #PWR026
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR026
 U 1 1 5FFB06E6
 P 9850 6250
 F 0 "#PWR026" H 9850 6250 30  0001 C CNN
@@ -145,7 +145,7 @@ Wire Wire Line
 	5450 3300 5350 3300
 Connection ~ 5350 3300
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 5FFC10FA
 P 4950 7550
 AR Path="/5FFB81CD/5FFC10FA" Ref="#PWR?"  Part="1" 
@@ -229,7 +229,7 @@ $EndComp
 Wire Wire Line
 	4000 2750 4000 2350
 $Comp
-L Microtan_exp:XTAL X?
+L fx502p-sd-pcb-1-rescue:XTAL-Microtan_exp X?
 U 1 1 60007C71
 P 5050 1950
 AR Path="/5FFB81CD/60007C71" Ref="X?"  Part="1" 
@@ -284,7 +284,7 @@ F 3 "~" H 5700 2500 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 60007C91
 P 5050 2750
 AR Path="/5FFB81CD/60007C91" Ref="#PWR?"  Part="1" 
@@ -322,7 +322,7 @@ F 3 "~" H 3000 1650 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 60007CA4
 P 3000 1900
 AR Path="/5FFB81CD/60007CA4" Ref="#PWR?"  Part="1" 
@@ -335,7 +335,7 @@ F 3 "" H 3000 1900 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 60007CAA
 P 4500 1450
 AR Path="/5FFB81CD/60007CAA" Ref="#PWR?"  Part="1" 
@@ -424,7 +424,7 @@ CALC_CONT
 Text GLabel 1300 6900 0    50   Input ~ 0
 CALC_GND
 $Comp
-L Microtan_65_CPU-cache:GND #PWR02
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR02
 U 1 1 6003805B
 P 1350 7200
 F 0 "#PWR02" H 1350 7200 30  0001 C CNN
@@ -493,7 +493,7 @@ F 3 "~" H 7250 2550 50  0001 C CNN
 	-1   0    0    1   
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR03
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR03
 U 1 1 60048E05
 P 8050 2950
 F 0 "#PWR03" H 8050 2950 30  0001 C CNN
@@ -519,7 +519,7 @@ F 3 "~" V 2350 2310 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR04
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR04
 U 1 1 6004E771
 P 2350 2400
 F 0 "#PWR04" H 2350 2400 30  0001 C CNN
@@ -569,7 +569,7 @@ CALC_D3
 Text GLabel 1050 2800 1    50   Input ~ 0
 CALC_OP
 $Comp
-L Microtan_65_CPU-cache:GND #PWR06
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR06
 U 1 1 6006A9F7
 P 950 4300
 F 0 "#PWR06" H 950 4300 30  0001 C CNN
@@ -611,7 +611,7 @@ Wire Wire Line
 Wire Wire Line
 	4450 6900 3050 6900
 $Comp
-L Microtan_65_CPU-cache:GND #PWR08
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR08
 U 1 1 60085A8E
 P 3200 7150
 F 0 "#PWR08" H 3200 7150 30  0001 C CNN
@@ -664,7 +664,7 @@ Wire Wire Line
 Wire Wire Line
 	4450 6100 2550 6100
 $Comp
-L Microtan_65_CPU-cache:GND #PWR05
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR05
 U 1 1 600A841C
 P 2700 6350
 F 0 "#PWR05" H 2700 6350 30  0001 C CNN
@@ -714,7 +714,7 @@ F 3 "~" H 9250 2300 50  0001 C CNN
 	-1   0    0    1   
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR021
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR021
 U 1 1 600EAC67
 P 8550 1650
 F 0 "#PWR021" H 8550 1650 30  0001 C CNN
@@ -729,7 +729,7 @@ Wire Wire Line
 Wire Wire Line
 	8550 1250 9050 1250
 $Comp
-L Microtan_65_CPU-cache:GND #PWR023
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR023
 U 1 1 600EE7BA
 P 8550 2600
 F 0 "#PWR023" H 8550 2600 30  0001 C CNN
@@ -939,7 +939,7 @@ Option to power calculator\nfrom GPIO line. FX502P only.\nRemove batteries.
 Text Notes 1500 6800 0    50   ~ 0
 Option to power \ncalculator from \nUSB (FX502P only).\nRemove batteries.
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 601CED60
 P 5700 2750
 AR Path="/5FFB81CD/601CED60" Ref="#PWR?"  Part="1" 
@@ -997,7 +997,7 @@ F 3 "" H 7400 4650 50  0001 C CNN
 	0    -1   1    0   
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR0101
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR0101
 U 1 1 602953AC
 P 7200 5000
 F 0 "#PWR0101" H 7200 5000 30  0001 C CNN
@@ -1008,7 +1008,7 @@ F 3 "" H 7200 5000 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR0102
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR0102
 U 1 1 6029CA74
 P 7400 5000
 F 0 "#PWR0102" H 7400 5000 30  0001 C CNN
@@ -1019,7 +1019,7 @@ F 3 "" H 7400 5000 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR0103
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR0103
 U 1 1 602A3D07
 P 7600 5000
 F 0 "#PWR0103" H 7600 5000 30  0001 C CNN

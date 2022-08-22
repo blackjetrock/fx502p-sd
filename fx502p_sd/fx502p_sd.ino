@@ -43,7 +43,7 @@
 #define USE_HINT_LENGTH            0   // Sometimes we know how long the next packet is
 #define LATER_OP_RD                1   // Fixes the problem where the OP GPIO state isn't read correctly,
                                        // so adds a delay before we read it.
-#define ENABLE_SERIAL              1
+#define ENABLE_SERIAL              0
 #define ENABLE_OLED_SETUP          1
 #define DEBUG_SERIAL               0
 #define DIRECT_WRITE               0
@@ -837,28 +837,32 @@ void put_data_words_byte(int i, int byte)
 void load_preset(int *preset_data, int preset_length)
 {
   int i;
+#if ENABLE_SERIAL  
   Serial.println(preset_length);
-  
+#endif
   for(i=0; 10; i++)
     {
       put_data_words_byte(i, *(preset_data++));
     }
+#if ENABLE_SERIAL  
   Serial.println("done");
+#endif
 }
 
 void load_preset_empty_mem()
 {
   int i;
-
+#if ENABLE_SERIAL  
   Serial.println(sizeof(preset_empty_mem));
-  
+#endif
   for(i=0; i<208; i++)
     {
       put_data_words_byte(i, preset_empty_mem[i]);
     }
   num_data_words = 208;
-  
+#if ENABLE_SERIAL  
   Serial.println("done");
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -886,17 +890,22 @@ void cmd_index(String cmd)
   int i;
   char line[40];
   
+#if ENABLE_SERIAL  
   Serial.println("INDEX");
+#endif
   arg = cmd.substring(1);
-  
+
+#if ENABLE_SERIAL  
   Serial.println(arg);
-  
+#endif  
   indx = arg.toInt();
   
   int data = 0;
   data    = (data_words[i] & 0x7F80) >> 7;
   sprintf(line, "DATA: %02X: %02X", indx, data_words[i]);
+#if ENABLE_SERIAL  
   Serial.println(line);
+#endif
 }
 
 // Modify the buffer
@@ -904,8 +913,10 @@ void cmd_modify(String cmd)
 {
   String arg;
   char line[40];
-  
+
+#if ENABLE_SERIAL  
   Serial.println("MOD");
+#endif
   arg = cmd.substring(1);
 
   if( indx <= MAX_BYTES )
@@ -913,8 +924,9 @@ void cmd_modify(String cmd)
       // Get new value
       int data = arg.toInt();
       int word = data_words[indx];
-
+#if ENABLE_SERIAL  
       Serial.println(data);
+#endif
       // Clear data bits
       word &= ~0x7F80;
       word |= reverse(data,8) << 7;
@@ -925,7 +937,9 @@ void cmd_modify(String cmd)
       data_words[indx] |= (correct_parity_of(data) << 6);
 
       sprintf(line, "%04d:%02X", indx, data_words[indx]);
+#if ENABLE_SERIAL  
       Serial.println(line);
+#endif
     }
   
 }
@@ -950,7 +964,8 @@ void cmd_display(String cmd)
   
   int ascii_i = 0;
   ascii[0] ='\0';
-  
+
+#if ENABLE_SERIAL  
   Serial.print("Buffer Count:");
   Serial.print(buf_in);
   //  Serial.print("  Word in:");
@@ -967,7 +982,8 @@ void cmd_display(String cmd)
   Serial.print(num_data_words);
 
   Serial.println("");
-
+#endif
+  
   char tag_decode[40];
   char state_decode[40];
 
@@ -977,7 +993,9 @@ void cmd_display(String cmd)
       if( (word_buffer[i] & 0xff00) != 0x1000 )
 	{
 	  sprintf(line, " %02X (%d bits) S%d(%s)", word_buffer[i], blen_buffer[i], state_buffer[i], state_decode);
+#if ENABLE_SERIAL  
 	  Serial.println(line);
+#endif
 	}
       else
 	{
@@ -1057,7 +1075,9 @@ void cmd_display(String cmd)
 	    }
 	  
 	  sprintf(line, "T%04X (%s) %04X S%d(%s)", word_buffer[i], tag_decode, blen_buffer[i], state_buffer[i], state_decode);
+#if ENABLE_SERIAL  
 	  Serial.println(line);
+#endif
 	}
     }
 
@@ -1071,7 +1091,9 @@ void cmd_display(String cmd)
   int data = 0;
   int word = 0;
 
+#if ENABLE_SERIAL  
   Serial.println("     00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F");
+#endif
   
   for(i=0; i<NUM_DATA_WORDS; i++)
     {
@@ -1088,14 +1110,16 @@ void cmd_display(String cmd)
 
       if( (i%16) == 0 )
 	{
+#if ENABLE_SERIAL  
 	  Serial.println("");
 	  sprintf(line, "%04X:", i);
 	  Serial.print(line);
+#endif
 	}
-      
+#if ENABLE_SERIAL  
       sprintf(line, "%02X ", reverse(data,8));
       Serial.print(line);
-
+#endif
     }
 #endif
 }
@@ -1120,9 +1144,10 @@ void cmd_fix_parity(String cmd)
 
   for(i=0; i<NUM_DATA_WORDS; i++)
     {
+#if ENABLE_SERIAL  
       sprintf(line, " %d %04X ", i, data_words[i]);
       Serial.print(line);
-
+#endif
       // Decode to get the data bits
       word    = data_words[i];
       start   = (word & 0x8000) >> 16;
@@ -1130,10 +1155,10 @@ void cmd_fix_parity(String cmd)
       parity  = (word & 0x0040) >> 6;
       stop    = (word & 0x0030) >> 4;
       xxx     = (word & 0x000F) >> 0;
-
+#if ENABLE_SERIAL  
       sprintf(line, " %d %02X %d=%d %01X %01X ", start, reverse(data,8), parity, correct_parity_of(data), stop, xxx);
       Serial.println(line);
-
+#endif
     }
 }
 
@@ -1176,10 +1201,11 @@ void cmd_deletefile(String cmd)
   
   arg = cmd.substring(strlen("delete "));
 
+#if ENABLE_SERIAL  
   Serial.print("Deleting file '");
   Serial.print(arg);
   Serial.println("'");
-  
+#endif  
   SD.remove(arg);
 }
 
@@ -1191,11 +1217,12 @@ void core_read(String arg, boolean oled_nserial)
 
   strcpy(status_action, "Read");
   sprintf(status_filenum, "%s", arg.c_str());
-  
+
+#if ENABLE_SERIAL  
   Serial.print("Reading file '");
   Serial.print(arg);
   Serial.println("'");
-  
+#endif
   myFile = SD.open(arg);
 
   if (myFile)
@@ -1216,7 +1243,9 @@ void core_read(String arg, boolean oled_nserial)
 	  if( ch == '\n' )
 	    {
 	      line[li++] = '\0';
+#if ENABLE_SERIAL  
 	      Serial.println(line);
+#endif
 	      sscanf(line, "%X", &(data_words[num_data_words++]));
 	      li = 0;
 	    }
@@ -1240,9 +1269,10 @@ void core_read(String arg, boolean oled_nserial)
       myFile.close();
 
       sprintf(status_num_bytes, "%d", num_data_words);
-      
+#if ENABLE_SERIAL        
       Serial.print(num_data_words);
       Serial.println(" bytes read.");
+#endif
       sprintf(status_status, "");
       sprintf(status_error, "");
       
@@ -1251,9 +1281,10 @@ void core_read(String arg, boolean oled_nserial)
     {
       // if the file didn't open, print an error:
       sprintf(status_error, "Error opening");
-      
+#if ENABLE_SERIAL  
       Serial.print("Error opening ");
       Serial.println(arg);
+#endif
     }
 }
 
@@ -1282,18 +1313,24 @@ void cmd_listfiles(String cmd)
       // no more files
       break;
     }
-
+    
+#if ENABLE_SERIAL  
     Serial.print(entry.name());
-
+#endif
     if (entry.isDirectory())
       {
+#if ENABLE_SERIAL  
 	Serial.println("/");
+#endif
       }
     else
       {
 	// files have sizes, directories do not
+#if ENABLE_SERIAL  
 	Serial.print("\t\t");
 	Serial.println(entry.size(), DEC);
+#endif
+	
       }
     entry.close();
   }
@@ -1304,11 +1341,15 @@ void cmd_listfiles(String cmd)
 void cmd_initsd(String cmd)
 {
   if (!SD.begin(chipSelect)) {
+#if ENABLE_SERIAL  
     Serial.println("SD Card initialisation failed!");
+#endif
   }
   else
     {
+#if ENABLE_SERIAL  
       Serial.println("SD card initialised.");
+#endif
     }
 
 }
@@ -1339,7 +1380,8 @@ void core_writefile(boolean oled_nserial)
   
   sprintf(status_action, "Write");
   sprintf(status_filenum, "%s", filename);
-  
+
+#if ENABLE_SERIAL  
   Serial.println("");
   Serial.print("Writing ");
   Serial.print(num_data_words);
@@ -1347,6 +1389,7 @@ void core_writefile(boolean oled_nserial)
   Serial.print(filename);
   Serial.print("'");
   Serial.println("");
+#endif
   
   // Delete so we have no extra data if the file is currently larger than the buffer
   SD.remove(filename);
@@ -1365,14 +1408,17 @@ void core_writefile(boolean oled_nserial)
       myFile.close();
       
       sprintf(status_num_bytes, "%d", num_data_words);
-      
+#if ENABLE_SERIAL  
       Serial.print(num_data_words);
       Serial.println(" bytes written");
+#endif
     }
   else
     {
       sprintf(status_error, "Could not open file");
+#if ENABLE_SERIAL  
       Serial.println("Could not open file");
+#endif
     }
 }
 
@@ -1383,7 +1429,9 @@ void cmd_port(String cmd)
   while(1)
     {
       pb = GPIOB->IDR;
+#if ENABLE_SERIAL  
       Serial.println(pb, HEX);
+#endif
     }
 }
 
@@ -1765,9 +1813,10 @@ void display_prog_core(int start, boolean serialhdr)
       nextdata = (nextword & 0x7F80) >> 7;
       nextdata = reverse(nextdata, 8);
 
+#if ENABLE_SERIAL  
       Serial.print("Y=");
       Serial.println(display.getCursorY());
-      
+#endif      
       if( !serialhdr)
 	{
 	  if( (display.getCursorY() == 64) )
@@ -1795,7 +1844,9 @@ void display_prog_core(int start, boolean serialhdr)
 	    {
 	      display.println("");
 	    }
+#if ENABLE_SERIAL  
 	  Serial.println("");
+#endif
 	}
 
        if( token_table[data].flags & TF_NOGAP )
@@ -1841,12 +1892,13 @@ void display_prog_core(int start, boolean serialhdr)
 	       display.print(" ");
 	     }
 	 }
-       
+
+#if ENABLE_SERIAL  
       Serial.print(token_table[data].keyword);
       Serial.print("(");
       Serial.print(data, HEX);
       Serial.print(") ");
-      
+#endif      
       display.display();
     }
 
@@ -2046,7 +2098,7 @@ void read_6050()
     }
   
   //  Serial.println(numBytes);
-  
+#if ENABLE_SERIAL  
   for(int i=0; i<14; i++)
     {
       Serial.print(registers[i], HEX);
@@ -2054,6 +2106,7 @@ void read_6050()
     }
   
   Serial.println("");
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2079,7 +2132,7 @@ void read_8951()
     }
   
   //  Serial.println(numBytes);
-  
+#if ENABLE_SERIAL  
   for(int i=0; i<5; i++)
     {
       Serial.print(registers[i], HEX);
@@ -2087,6 +2140,7 @@ void read_8951()
     }
   
   Serial.println("");
+#endif
 }
 
 
@@ -2099,10 +2153,12 @@ void read_8951()
 
 void printTwoDigit(int n)
 {
+#if ENABLE_SERIAL  
   if (n < 10) {
     Serial.print('0');
   }
   Serial.print(n);
+#endif
 }
 
 #define I2C_ADDRESS 0x68
@@ -2127,8 +2183,10 @@ void readTime(void)
   
   if (numBytes != NUM_BYTES)
     {
+#if ENABLE_SERIAL        
       Serial.print("Read wrong number of bytes: ");
       Serial.println((int)numBytes);
+#endif
       return;
     }
   
@@ -2178,19 +2236,25 @@ void readTime(void)
   int second = (10 * tenSecond) + unitSecond;
   
   // ISO8601 is the only sensible time format
-  Serial.print("Time: ");
-  Serial.print(year);
-  Serial.print('-');
+
+  //  Serial.print("Time: ");
+  //Serial.print(year);
+  //Serial.print('-');
+
+  
   printTwoDigit(month);
-  Serial.print('-');
+
+
+  //Serial.print('-');
+
   printTwoDigit(dateOfMonth);
-  Serial.print('T');
+  //Serial.print('T');
   printTwoDigit(hour);
-  Serial.print(':');
+  //Serial.print(':');
   printTwoDigit(minute);
-  Serial.print(':');
+  //Serial.print(':');
   printTwoDigit(second);
-  Serial.println();
+  //Serial.println();
 
 }
 
@@ -2214,8 +2278,10 @@ void get_time(void)
   
   if (numBytes != NUM_BYTES)
     {
+#if ENABLE_SERIAL  
       Serial.print("Read wrong number of bytes: ");
       Serial.println((int)numBytes);
+#endif
       return;
     }
   
@@ -2296,7 +2362,9 @@ void put_time(int hour_bcd, int minute_bcd, int second_bcd)
 
 void cmd_clk(String cmd)
 {
+#if ENABLE_SERIAL  
   Serial.println("Clock");
+#endif
   readTime();
 }
 
@@ -2310,18 +2378,26 @@ void cmd_print(String cmd)
 
 void cmd_8951(String cmd)
 {
+#if ENABLE_SERIAL  
   Serial.println("Reading PCF8951...");
-
+#endif
   read_8951();
+#if ENABLE_SERIAL  
   Serial.println("Done");
+#endif
 }
 
 void cmd_6050(String cmd)
 {
+#if ENABLE_SERIAL  
   Serial.println("Reading MPU6050...");
-
+#endif
+  
   read_6050();
+
+#if ENABLE_SERIAL  
   Serial.println("Done");
+#endif
 }
 
 
@@ -2351,12 +2427,16 @@ void cmd_disp_mem(String cmd)
       break;
     }
   sprintf(line, "\nType:%s (%d) Number:%03d", filetype_s, filetype, filenum);
+#if ENABLE_SERIAL  
   Serial.println(line);
-
+#endif
+  
   for(int i=2; i<2+22*8;i+=MEMORY_LENGTH)
     {
       sprintf(line, "%s: %s", memory_name((i-2)/MEMORY_LENGTH), decode_memory(i, false));
+#if ENABLE_SERIAL  
       Serial.println(line);
+#endif
     }
 
 }
@@ -2403,7 +2483,9 @@ struct
 
 void cmd_null(String cmd)
 {
+#if ENABLE_SERIAL  
   Serial.println("Null cmd");
+#endif
 }
 
 void cmd_help(String cmd)
@@ -2416,12 +2498,15 @@ void cmd_help(String cmd)
     for(i=0; i<NUM_CMDS; i++)
 #endif
       {
+#if ENABLE_SERIAL  
 	Serial.println(cmdlist[i].cmdname);
+#endif
       }
 }
 
 void run_monitor()
 {
+#if ENABLE_SERIAL  
   char c;
   int i;
   String test;
@@ -2460,6 +2545,7 @@ void run_monitor()
 	}
       //Serial.println("Monitor process completed");
     }
+#endif
 }
 
 // The switch menu/OLED display system
@@ -3046,7 +3132,9 @@ void setup() {
 
   readInterval.start(2000, AsyncDelay::MILLIS);
 #if 1
+#if ENABLE_SERIAL  
   Serial.println(1.234e10);
+#endif
   
   for(i=0; i<TEXT_DISPLAY_LINES; i++)
     {
@@ -3056,7 +3144,7 @@ void setup() {
 
   // Serial header
   serial_hdr.begin(9600);
-  //  serial_hdr.println("FX502P Gadget");
+  serial_hdr.println("FX502P Gadget");
 
   //  Wire2.begin();
 
@@ -3098,41 +3186,53 @@ void setup() {
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c))
     { // Address 0x3D for 128x64
+#if ENABLE_SERIAL  
       Serial.println(F("SSD1306 allocation failed"));
+#endif
       for(;;); // Don't proceed, loop forever
     }
 
+#if ENABLE_SERIAL  
   Serial.println("");
   Serial.println("");
   Serial.println("fx502p Gadget");
   Serial.println("");
   Serial.println("OLED OK.");
+#endif
   
   // Clear the buffer
   display.clearDisplay();
+#if ENABLE_SERIAL  
   Serial.print("\nInitializing SD card...");
+#endif
   display.setTextSize(1);             // Normal 1:1 pixel scale
   display.setTextColor(SSD1306_WHITE);        // Draw white text
   display.setCursor(0,0);             // Start at top-left corner
   display.println(F("fx502p Gadget"));
   display.display();
   delay(2000);
-  
-  Serial.print("\nInitializing SD card...");
 
+#if ENABLE_SERIAL  
+  Serial.print("\nInitializing SD card...");
+#endif
+  
 #if 0  
   // we'll use the initialization code from the utility libraries
   // since we're just testing if the card is working!
   if (!card.init(SPI_HALF_SPEED, chipSelect)) {
+#if ENABLE_SERIAL  
     Serial.println("initialization failed. Things to check:");
     Serial.println("* is a card inserted?");
     Serial.println("* is your wiring correct?");
     Serial.println("* did you change the chipSelect pin to match your shield or module?");
-
+#endif
+    
     display.println("SD Fail");
     display.display();
   } else {
+#if ENABLE_SERIAL  
     Serial.println("Wiring is correct and a card is present.");
+#endif
     display.println("SD OK");
     display.display();
     delay(2000);
@@ -3140,6 +3240,7 @@ void setup() {
   }
 
   // print the type of card
+#if ENABLE_SERIAL  
   Serial.println();
   Serial.print("Card type:         ");
   switch (card.type()) {
@@ -3155,12 +3256,15 @@ void setup() {
   default:
     Serial.println("Unknown");
   }
+#endif
+#if ENABLE_SERIAL  
   // Now we will try to open the 'volume'/'partition' - it should be FAT16 or FAT32
   if (!volume.init(card)) {
     Serial.println("Could not find FAT16/FAT32 partition.\nMake sure you've formatted the card");
     while (1);
   }
-
+#endif
+#if ENABLE_SERIAL  
   Serial.print("Clusters:          ");
   Serial.println(volume.clusterCount());
   Serial.print("Blocks x Cluster:  ");
@@ -3169,32 +3273,41 @@ void setup() {
   Serial.print("Total Blocks:      ");
   Serial.println(volume.blocksPerCluster() * volume.clusterCount());
   Serial.println();
-
+#endif
+  
   // print the type and size of the first FAT-type volume
   uint32_t volumesize;
+#if ENABLE_SERIAL  
   Serial.print("Volume type is:    FAT");
   Serial.println(volume.fatType(), DEC);
-
+#endif
+  
   volumesize = volume.blocksPerCluster();    // clusters are collections of blocks
   volumesize *= volume.clusterCount();       // we'll have a lot of clusters
   volumesize /= 2;                           // SD card blocks are always 512 bytes (2 blocks are 1KB)
+#if ENABLE_SERIAL  
   Serial.print("Volume size (Kb):  ");
   Serial.println(volumesize);
   Serial.print("Volume size (Mb):  ");
+#endif
+  
   volumesize /= 1024;
+#if ENABLE_SERIAL  
   Serial.println(volumesize);
   Serial.print("Volume size (Gb):  ");
   Serial.println((float)volumesize / 1024.0);
+#endif
+  
 #else
     
   if (!SD.begin(chipSelect)) {
     //if (!card.init(SPI_HALF_SPEED, chipSelect)) {
-    Serial.println("SD Card initialisation failed!");
+    //Serial.println("SD Card initialisation failed!");
     sprintf(status_sd_stat, "SD FAIL");
   }
   else
     {
-      Serial.println("SD card initialised.");
+      //Serial.println("SD card initialised.");
       sprintf(status_sd_stat, "SD OK");
     }
 
@@ -3302,8 +3415,10 @@ void meta_check()
   // Get the F memory contents
   M0F = decode_memory(MEM_OFF_M0F, false);
 
+#if ENABLE_SERIAL  
   sprintf(line, "M0F contents:%s exp:(%s)", M0F, M0F+MEM_OFF_EXPONENT);
   Serial.println(line);
+#endif
   
   // Check for special exponents. These give us 'pages' of data that can be used to
   // turn thing son and off
@@ -3371,9 +3486,10 @@ void meta_check()
       // Display page changed so reset dot and AC key handlers
       dotkey_handler = dotkey_null;
       ackey_handler  = ackey_null;
-      
+#if ENABLE_SERIAL  
       Serial.print("Display page:");
       Serial.println(current_display);
+#endif
     }
 
   // Graphics command
@@ -3393,9 +3509,11 @@ void meta_check()
       y = d4*100+d5*10+d6;
 
       graphics_plot(x,y);
-      
+
+#if ENABLE_SERIAL        
       sprintf(line, "X,Y=%d,%d", x, y);
       Serial.println(line);
+#endif
     }
 
   // Put text on the display
@@ -3412,12 +3530,13 @@ void meta_check()
 	case '1':
 	  text_x = (*(M0F+MEM_OFF_D1)-'0')*10+(*(M0F+MEM_OFF_D2)-'0');
 	  text_y = (*(M0F+MEM_OFF_D3)-'0')*10+(*(M0F+MEM_OFF_D4)-'0');
+#if ENABLE_SERIAL  
 	  Serial.print(M0F);
 	  Serial.print(" x,y : ");
 	  Serial.print(text_x);
 	  Serial.print(" ");
 	  Serial.println(text_y);
-	  
+#endif
 	  break;
 
 	case '2':
@@ -3438,8 +3557,9 @@ void meta_check()
 
   // Time
   // 1.0 E 42 : Read time
-  // 2.yymmdd E42 Set date
-  // 3.hhmmss E42 Set time
+  // 2.0 E 42 : read Time
+  // 3.yymmdd E42 Set date
+  // 4.hhmmss E42 Set time
   
   if( strncmp(M0F+MEM_OFF_EXPONENT, "42", 2)==0 )
     {
@@ -3564,9 +3684,10 @@ void meta_check()
       // Build file name
       sprintf(filename_bank, "%c%c%c%c", *(M0F+MEM_OFF_D0), *(M0F+MEM_OFF_D1), *(M0F+MEM_OFF_D2), *(M0F+MEM_OFF_D3));
       sprintf(line, "Filename bank:%s", filename_bank);
+#if ENABLE_SERIAL  
       Serial.println(line);
       Serial.println("Bank");
-      
+#endif
     }
   
   update_display();
@@ -3591,7 +3712,7 @@ void loop() {
   
   if( (loopcnt % 500000) == 0 )
     {
-      Serial.println("Loop");
+      //Serial.println("Loop");
     }
 #endif
   
@@ -3609,8 +3730,8 @@ void loop() {
   if( other_word_flag )
     {
       other_word_flag = false;
-      Serial.print("OW:");
-      Serial.println(other_word);
+      //Serial.print("OW:");
+      //Serial.println(other_word);
       
       if( num_other_words < OBUF_LEN )
 	{
@@ -3623,7 +3744,7 @@ void loop() {
   if( cis_flag_event_dotkey )
     {
       cis_flag_event_dotkey = false;
-      Serial.println("Dot Key");
+      //Serial.println("Dot Key");
 
       // Call the dot key handler
       (*dotkey_handler)();
@@ -3632,7 +3753,7 @@ void loop() {
   if( cis_flag_event_ackey )
     {
       cis_flag_event_ackey = false;
-      Serial.println("AC Key");
+      //Serial.println("AC Key");
 
       // Call the AC key handler
       (*ackey_handler)();
@@ -3709,8 +3830,8 @@ void loop() {
   if( Serial2.available(),0 )
     {
       c = Serial2.read();
-      Serial.print(" S");
-      Serial.println(c,HEX);
+      //Serial.print(" S");
+      //Serial.println(c,HEX);
     }
 #endif
   

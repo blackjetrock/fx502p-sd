@@ -14,13 +14,14 @@ Comment3 ""
 Comment4 ""
 $EndDescr
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 5FE7F06A
 P 2050 2650
 AR Path="/5FDAC4BF/5FE7F06A" Ref="#PWR?"  Part="1" 
 AR Path="/5FE7A220/5FE7F06A" Ref="#PWR0111"  Part="1" 
 AR Path="/5F7FB2B8/5FE7F06A" Ref="#PWR0111"  Part="1" 
 AR Path="/5FFAC35B/5FE7F06A" Ref="#PWR030"  Part="1" 
+AR Path="/5FE7F06A" Ref="#PWR030"  Part="1" 
 F 0 "#PWR030" H 2050 2650 30  0001 C CNN
 F 1 "GND" H 2050 2580 30  0001 C CNN
 F 2 "" H 2050 2650 60  0000 C CNN
@@ -129,13 +130,14 @@ F 3 "~" H 2600 1350 50  0001 C CNN
 	0    -1   -1   0   
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 5FE7F09D
 P 4100 1800
 AR Path="/5FDAC4BF/5FE7F09D" Ref="#PWR?"  Part="1" 
 AR Path="/5FE7A220/5FE7F09D" Ref="#PWR0112"  Part="1" 
 AR Path="/5F7FB2B8/5FE7F09D" Ref="#PWR0112"  Part="1" 
 AR Path="/5FFAC35B/5FE7F09D" Ref="#PWR034"  Part="1" 
+AR Path="/5FE7F09D" Ref="#PWR034"  Part="1" 
 F 0 "#PWR034" H 4100 1800 30  0001 C CNN
 F 1 "GND" H 4100 1730 30  0001 C CNN
 F 2 "" H 4100 1800 60  0000 C CNN
@@ -293,7 +295,7 @@ F 3 "" H 2000 3100 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 5FE90D0A
 P 2050 4250
 AR Path="/5FDAC4BF/5FE90D0A" Ref="#PWR?"  Part="1" 
@@ -468,7 +470,7 @@ Connection ~ 6650 1150
 Wire Wire Line
 	6650 1150 6900 1150
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 5FED051A
 P 6900 1450
 AR Path="/5FED051A" Ref="#PWR?"  Part="1" 
@@ -614,7 +616,7 @@ Connection ~ 7650 2050
 Wire Wire Line
 	7650 2050 8100 2050
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 5F95AD5D
 P 6900 2350
 AR Path="/5F95AD5D" Ref="#PWR?"  Part="1" 
@@ -709,7 +711,7 @@ Connection ~ 7700 2900
 Wire Wire Line
 	7700 2900 8150 2900
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 5F95FC14
 P 6950 3200
 AR Path="/5F95FC14" Ref="#PWR?"  Part="1" 
@@ -803,7 +805,7 @@ F 3 "" H 4150 4450 50  0001 C CNN
 	0    -1   1    0   
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 6001C4CA
 P 4950 4850
 AR Path="/5F5533DA/6001C4CA" Ref="#PWR?"  Part="1" 
@@ -855,7 +857,7 @@ Wire Wire Line
 Text GLabel 5500 4150 2    50   Input ~ 0
 NRST
 $Comp
-L Microtan_exp:XTAL X?
+L fx502p-sd-pcb-1-rescue:XTAL-Microtan_exp X?
 U 1 1 6001C4E2
 P 4550 5900
 AR Path="/5FFB81CD/6001C4E2" Ref="X?"  Part="1" 
@@ -905,7 +907,7 @@ F 3 "~" H 3900 6450 50  0001 C CNN
 	-1   0    0    -1  
 $EndComp
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 6001C4F8
 P 3900 6700
 AR Path="/5FFB81CD/6001C4F8" Ref="#PWR?"  Part="1" 
@@ -959,7 +961,7 @@ Wire Wire Line
 	5250 5600 4950 5600
 Connection ~ 4950 5600
 $Comp
-L Microtan_65_CPU-cache:GND #PWR?
+L fx502p-sd-pcb-1-rescue:GND-Microtan_65_CPU-cache #PWR?
 U 1 1 6001C513
 P 4550 6700
 AR Path="/5FFB81CD/6001C513" Ref="#PWR?"  Part="1" 

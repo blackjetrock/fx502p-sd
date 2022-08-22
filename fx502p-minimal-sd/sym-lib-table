@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name fx502p-minimal-sd-rescue)(type Legacy)(uri ${KIPRJMOD}/fx502p-minimal-sd-rescue.lib)(options "")(descr ""))
+)
