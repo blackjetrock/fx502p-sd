@@ -26,7 +26,9 @@ Adapter that allows calculator to access and SD card and GPIOs on an STM32. Allo
 
  There is code in this sketch to set and read the time and date. This
  uses a DS3231 RTC attached to the PC7 and PC6 GPIO lines on the gpio
- connector J7. 
+ connector J7. On the module I used, GND and VCC lined up with GND and 3V3 on J7 
+ so the code uses the GPIO lines that line up with SDA and SCL and create 
+ an I2C bus on those pins.
 
 Commands
 ========
