@@ -51,13 +51,37 @@ This sets the filename bank to ABCD
 
 Real Time Clock Commands
 ------------------------
+This requires an DS3231 I2C real time clock module to hold the time and date. It needs to be attached to the I2C
 
 1.0 E 42 : Read time
+ Read date
+ After this is received, the date can be read using an
+ 
+	 inv LOAD inv EXE
+	  or
+	 inv LOAD EXE
+	
+	 The date is in either the X register or the F memory
+	 respectively.
+
 2.yymmdd E42 Set date
 3.hhmmss E42 Set time
 
 
+Text Display Commands
+---------------------
 
+Put text on the display
+
+1.xxyy E41     
+  
+  Set cursor to (x,y)
+  
+2.aabbccdd     
+  
+  Put text on display aa etc are ascii codes
+
+#
 # Note:
 # Although the FX-602P uses a similar command set it doesn't yet work with this adapter. It should be possible to make it work though.
 # The FX-702p uses the same command set but operates at 5V so it also doesn't work with this adapter without some form of level shifter.
