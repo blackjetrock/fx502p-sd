@@ -28,6 +28,36 @@ Adapter that allows calculator to access and SD card and GPIOs on an STM32. Allo
  uses a DS3231 RTC attached to the PC7 and PC6 GPIO lines on the gpio
  connector J7. 
 
+Commands
+========
+
+The FX502P communicates with the gadget using the INV SAVE INV EXE keystroke. This saves the 
+current display value to the tape interface. The commands are coded in numbers, so to issue a command 
+enter the number on the calculator and hen press INV SAVE INV EXE
+
+1.0 E40
+This command displays help text on the OLED screen. Press the decimal point key to move
+to the next page of help text.
+
+A.BC E47
+This sets the current filename for programs to PABC.DAT. This is needed as even though the file number
+is entered on the calculator when savng and loading that number does not go over the interface when loading.
+
+A.BC E48
+This set sthe current filename to MABC for memory saving and loading.
+
+A.BCD E49
+This sets the filename bank to ABCD
+
+Real Time Clock Commands
+------------------------
+
+1.0 E 42 : Read time
+2.yymmdd E42 Set date
+3.hhmmss E42 Set time
+
+
+
 # Note:
 # Although the FX-602P uses a similar command set it doesn't yet work with this adapter. It should be possible to make it work though.
 # The FX-702p uses the same command set but operates at 5V so it also doesn't work with this adapter without some form of level shifter.
