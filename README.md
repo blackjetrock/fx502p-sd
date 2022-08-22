@@ -53,8 +53,7 @@ Real Time Clock Commands
 ------------------------
 This requires an DS3231 I2C real time clock module to hold the time and date. It needs to be attached to the I2C
 
-1.0 E 42 : Read time
- Read date
+1.0 E 42 : Read date
  After this is received, the date can be read using an
  
 	 inv LOAD inv EXE
@@ -62,6 +61,14 @@ This requires an DS3231 I2C real time clock module to hold the time and date. It
 	 inv LOAD EXE
 	
 	 The date is in either the X register or the F memory
+	 respectively.
+2.0 E 42 Read time
+ After this is received, the time can be read using an
+ 
+	 inv LOAD inv EXE
+	  or
+	 inv LOAD EXE
+	
 	 respectively.
 
 2.yymmdd E42 Set date
