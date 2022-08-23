@@ -109,6 +109,17 @@ The gadget can drive a simple thermal printer of the type used for receipt print
 The attachment is on J3. there's an (unmarked) GND connection which should be attached to the PSU for the printer. The TX line sends data to the printer when enabled in the gadget.
 When conneted and enabled, saving a program or memories results in the data being printed out, in ASCII.
 
+This is the printer attached to the gadget. The black lead is GND:
+![IMAG2673](https://user-images.githubusercontent.com/31587992/186103871-0126356a-db8c-4ae6-b160-0595b8cada4a.jpg)
+
+This is the rear of the printer showing the connections:
+![IMAG2676](https://user-images.githubusercontent.com/31587992/186103966-8dca466f-541c-466b-a4a6-35d6ce19fc37.jpg)
+
+The details of the printer PSU I used. This was just one I had lying about, I made a socket connection for it.
+![IMAG2674](https://user-images.githubusercontent.com/31587992/186103937-f3e9ff34-7684-4ce9-a8c4-ec7d56ae96f9.jpg)
+
+This is th eprinter I used, with some sample output.
+![IMAG2675](https://user-images.githubusercontent.com/31587992/186103979-77ccb95e-cc5d-4b36-b70f-66bfaab75b2f.jpg)
 
 
 #
