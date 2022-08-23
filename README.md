@@ -99,8 +99,10 @@ Sample_FX502P_Programs
 
 holds some example programs.
 
-- P998  
-- P999  
+- P998  Draws random dots on the OLED display
+- P999  Draws a sine wave on the OLED display
+
+
 #
 # Note:
 # Although the FX-602P uses a similar command set it doesn't yet work with this adapter. It should be possible to make it work though.
