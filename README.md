@@ -101,6 +101,7 @@ holds some example programs.
 
 - P998  Draws random dots on the OLED display
 - P999  Draws a sine wave on the OLED display
+![IMAG2677](https://user-images.githubusercontent.com/31587992/186105780-468d5783-0f16-4c4b-8286-751db65d038a.jpg)
 
 
 Printer
