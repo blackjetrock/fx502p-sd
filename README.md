@@ -99,8 +99,8 @@ Sample_FX502P_Programs
 
 holds some example programs.
 
--P998  
--P999  
+- P998  
+- P999  
 #
 # Note:
 # Although the FX-602P uses a similar command set it doesn't yet work with this adapter. It should be possible to make it work though.
