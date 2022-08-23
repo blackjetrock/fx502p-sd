@@ -90,6 +90,17 @@ Put text on the display
   
   Put text on display aa etc are ascii codes
 
+SamplePrograms
+--------------
+
+The directory 
+
+Sample_FX502P_Programs
+
+holds some example programs.
+
+-P998  
+-P999  
 #
 # Note:
 # Although the FX-602P uses a similar command set it doesn't yet work with this adapter. It should be possible to make it work though.
