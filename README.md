@@ -35,46 +35,89 @@ Commands
 
 The FX502P communicates with the gadget using the INV SAVE INV EXE keystroke. This saves the 
 current display value to the tape interface. The commands are coded in numbers, so to issue a command 
-enter the number on the calculator and hen press INV SAVE INV EXE
+enter the number on the calculator and then press INV SAVE INV EXE
+So, for example, to display the help text page onm the OLED display you need to enter 1.0E40 and then
+INV SAVE INV EXE. The help text should then be shown on the OLED display.
 
 1.0 E40
+
 This command displays help text on the OLED screen. Press the decimal point key to move
 to the next page of help text.
 
+1.1 E40
+
+Display status page
+
+1.2 E40
+Display the graphics page.
+Pixels can be set on this page using the graphics commands
+
+1.3 E40
+Display memory page.
+This page shows memories that have been sent using an INV SAVE EXE in MODE 1
+
+1.4 E40
+Display text page. text can be placed on this page with the text commands.
+
+
+1.5 E40
+Display token page
+This page display program tokens sent using INV SAVE EXE in MODE 3
+Page using the decimal point key.
+
+1.6 E40
+This page displays the current date and time. An RTC module must be attached using I2C.
+
+
+1.70 E40
+Turns printing off
+
+1.71 E40
+Turns printing on
+	  
+
+
 A.BC E47
+
 This sets the current filename for programs to PABC.DAT. This is needed as even though the file number
 is entered on the calculator when savng and loading that number does not go over the interface when loading.
 
 A.BC E48
+
 This set sthe current filename to MABC for memory saving and loading.
 
 A.BCD E49
-This sets the filename bank to ABCD
+
+This sets the filename bank to ABCD. The filename banks are a way to have more than 1000 programs or memories stored on an SD card. 
 
 Real Time Clock Commands
 ------------------------
 This requires an DS3231 I2C real time clock module to hold the time and date. It needs to be attached to the I2C
 
-1.0 E 42 : Read date
- After this is received, the date can be read using an
- 
-	 inv LOAD inv EXE
-	  or
-	 inv LOAD EXE
-	
-	 The date is in either the X register or the F memory
-	 respectively.
-2.0 E 42 Read time
- After this is received, the time can be read using an
- 
-	 inv LOAD inv EXE
-	  or
-	 inv LOAD EXE
-	
-	 respectively.
+1.0 E42 : Read date
 
-2.yymmdd E42 Set date
-3.hhmmss E42 Set time
+After this is received, the date can be read using an
+ 
+	 inv LOAD inv EXE
+	  or
+	 inv LOAD EXE
+
+The date is in either the X register or the F memory
+respectively.
+	 
+2.0 E42 : Read time
+
+After this is received, the time can be read using an
+ 
+	 inv LOAD inv EXE
+	  or
+	 inv LOAD EXE
+	
+respectively.
+
+2.yymmdd E42 : Set date
+
+3.hhmmss E42 : Set time
 
 
 Text Display Commands
@@ -90,6 +133,9 @@ Put text on the display
   
   Put text on display aa etc are ascii codes
 
+Graphics Display Commands
+-------------------------
+
 Sample Programs
 ---------------
 
@@ -100,6 +146,8 @@ Sample_FX502P_Programs
 holds some example programs.
 
 - P998  Draws random dots on the OLED display
+- ![IMAG2680](https://user-images.githubusercontent.com/31587992/186107269-a8835f86-1f78-45a7-9d78-4ada5e2dd4f6.jpg)
+
 - P999  Draws a sine wave on the OLED display
 ![IMAG2677](https://user-images.githubusercontent.com/31587992/186105780-468d5783-0f16-4c4b-8286-751db65d038a.jpg)
 
