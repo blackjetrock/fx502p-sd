@@ -90,8 +90,8 @@ Put text on the display
   
   Put text on display aa etc are ascii codes
 
-SamplePrograms
---------------
+Sample Programs
+---------------
 
 The directory 
 
@@ -101,6 +101,14 @@ holds some example programs.
 
 - P998  Draws random dots on the OLED display
 - P999  Draws a sine wave on the OLED display
+
+Printer
+-------
+
+The gadget can drive a simple thermal printer of the type used for receipt printing. An external PSU is required for printing due to the current requirements of the printer. Check the printer details for the curren tit uses, if it doesn't say, assume a 2A or higher PSU is needed, these printers take a lot of current. 
+The attachment is on J3. there's an (unmarked) GND connection which should be attached to the PSU for the printer. The TX line sends data to the printer when enabled in the gadget.
+When conneted and enabled, saving a program or memories results in the data being printed out, in ASCII.
+
 
 
 #
