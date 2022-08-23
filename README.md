@@ -102,6 +102,7 @@ holds some example programs.
 - P998  Draws random dots on the OLED display
 - P999  Draws a sine wave on the OLED display
 
+
 Printer
 -------
 
@@ -121,6 +122,11 @@ The details of the printer PSU I used. This was just one I had lying about, I ma
 This is th eprinter I used, with some sample output.
 ![IMAG2675](https://user-images.githubusercontent.com/31587992/186103979-77ccb95e-cc5d-4b36-b70f-66bfaab75b2f.jpg)
 
+This is the output when printing programs (ignore the memory line at the top, that is what is printed if INV SAVE INV EXE is used in MODE1):
+![IMAG2679](https://user-images.githubusercontent.com/31587992/186105376-8986fa3f-f110-412f-b77a-5a2a27c24139.jpg)
+
+And this is the printout of memories:
+![IMAG2678](https://user-images.githubusercontent.com/31587992/186105384-00c22a10-865b-4468-b48d-e43195b9bbd6.jpg)
 
 #
 # Note:
