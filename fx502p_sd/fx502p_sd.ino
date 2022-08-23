@@ -3543,7 +3543,7 @@ void meta_check()
 	  for(i=0; i<4; i++)
 	    {
 	      text_display_line[text_y][text_x+i] = (*(M0F+MEM_OFF_D1+2*i)-'0')*10+(*(M0F+MEM_OFF_D1+2*i+1)-'0');
-	      text_display_line[2][3] = 'Y';
+	      //text_display_line[2][3] = 'Y';
 	      
 	    }
 
