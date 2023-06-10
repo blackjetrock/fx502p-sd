@@ -52,6 +52,10 @@ int main(int argc, char *argv[])
     {
       c = fgetc(fp);
 
+      if( c == 0xFF )
+        {
+          break;
+        }
       printf("\n%02X", c);
     }
   

@@ -1293,6 +1293,7 @@ void exec_token(CALC_502_STATE *state, int key_press)
       // Do nothing, start of a program
       break;
 
+
     case TOK_TIMES:
     case KEY_TIMES:
     case TOK_PLUS:
@@ -1340,6 +1341,7 @@ void exec_token(CALC_502_STATE *state, int key_press)
       strcat(state->Xstr, ".");
       break;
       
+
     case TOK_0:
     case TOK_1:
     case TOK_2:
@@ -1350,6 +1352,7 @@ void exec_token(CALC_502_STATE *state, int key_press)
     case TOK_7:
     case TOK_8:
     case TOK_9:
+<<<<<<< HEAD
 
     case KEY_0:
     case KEY_1:
@@ -1392,6 +1395,13 @@ void exec_token(CALC_502_STATE *state, int key_press)
 	      state->X += num_value_of(token);
 	    }
 	  state->entering_number = true;
+=======
+      if( state->X <9999999999 )
+	{
+          int digval = token - TOK_0;
+	  state->X *= 10.0;
+	  state->X += digval;
+>>>>>>> 90d6d19 (Updates)
 	}
       break;
     }

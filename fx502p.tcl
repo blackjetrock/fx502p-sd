@@ -281,6 +281,16 @@ proc reverse {x n} {
     return $r
 }
 
+################################################################################
+#
+# Reads a file, decodes it and puts the decoded program in a window
+#
+# Also creates a binary verion of the file with the tokens in it in
+# <filename>.BIN
+#
+# This is used for the emulator
+#
+
 proc open_file_window {w fn} {
     toplevel $w
     
@@ -303,6 +313,9 @@ proc open_file_window {w fn} {
     set widx 0
     set program_file 0
     set memory_file 0
+
+    set ofn [file rootname $fn].BIN
+    set of [open $ofn wb]
     
     foreach line [split $filetext "\n"] {
 	if { [string length $line] > 0 } {
@@ -319,8 +332,12 @@ proc open_file_window {w fn} {
 	    set st [reverse $st 2]
 
 	    set index [expr $n2*16+$n1]
-	    set kw [lindex $::KEYWORDS $index]
 
+            # index has the binary token value in it
+	    set kw [lindex $::KEYWORDS $index]
+            puts [format "%02X" $index]
+            puts -nonewline $of [binary format c $index]
+            
 	    switch $widx {
 		0 {
 		    incr widx 1
@@ -382,6 +399,8 @@ proc open_file_window {w fn} {
 	    $w.text insert end "$hexval\n"
 	}
     }
+
+    close $of
 }
 
 

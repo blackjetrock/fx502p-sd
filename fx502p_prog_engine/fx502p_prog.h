@@ -4,6 +4,8 @@
 // FX502P Program Execution
 //
 //
+typedef unsigned char uint8_t;
+
 // Token codes
 
 
