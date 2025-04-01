@@ -129,9 +129,11 @@ Put text on the display
   
   Set cursor to (x,y)
   
-2.aabbccdd     
+2.aabbccdd E41   
   
-  Put text on display aa etc are ascii codes
+3.aabbccdd E41   
+  
+  Print text on printer, aa etc are ascii codes
 
 Graphics Display Commands
 -------------------------
