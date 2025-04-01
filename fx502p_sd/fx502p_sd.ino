@@ -85,10 +85,10 @@ SoftwareSerial serial_hdr(PA10, PA9); // RX, TX
 
 // Software I2C for the GPIO connector
 
-uint8_t sdaPin = PC7;
-uint8_t sclPin = PC6;
+uint8_t sdaPin = PC_7;
+uint8_t sclPin = PC_6;
 
-SoftWire sw(PC7, PC6);
+SoftWire sw(PC_7, PC_6);
 char swTxBuffer[16];
 char swRxBuffer[16];
 
@@ -130,13 +130,13 @@ const int CEPin      = PB13;
 const int VCCPin     = PB14;
 const int CONTPin    = PB15;
 
-const int LEDPin     = PC3;
+const int LEDPin     = PC_3;
 
 #define ISOLATE_BIT(N,X) ((X & (1<< N)) >> N)
 
 // Debug outputs
-const int statPin   = PC0;
-const int dataPin   = PC1;
+const int statPin   = PC_0;
+const int dataPin   = PC_1;
 
 
 // FSM output flags
@@ -3144,8 +3144,10 @@ void setup() {
 
   // Serial header
   serial_hdr.begin(9600);
-  serial_hdr.println("FX502P Gadget");
-
+  serial_hdr.println("*****************");		
+  serial_hdr.println("* FX502P Gadget *");
+  serial_hdr.println("*****************");
+  
   //  Wire2.begin();
 
 #if ENABLE_OLED_SETUP
