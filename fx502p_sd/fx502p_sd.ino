@@ -3177,7 +3177,6 @@ void setup() {
   pinMode(dataPin, OUTPUT);
 
   //  digitalWrite(dataPin, LOW);
-  
 
   // put your setup code here, to run once:
 #if ENABLE_SERIAL
@@ -3547,6 +3546,17 @@ void meta_check()
 	      text_display_line[text_y][text_x+i] = (*(M0F+MEM_OFF_D1+2*i)-'0')*10+(*(M0F+MEM_OFF_D1+2*i+1)-'0');
 	      //text_display_line[2][3] = 'Y';
 	      
+	    }
+
+	  break;
+
+	case '3':
+	  for(i=0; i<4; i++)
+	    {
+	      char frag[2] = " ";
+
+	      frag[0] = (*(M0F+MEM_OFF_D1+2*i)-'0')*10+(*(M0F+MEM_OFF_D1+2*i+1)-'0');
+	      serial_hdr.print(frag);
 	    }
 
 	  break;
