@@ -2,6 +2,8 @@
 
 Adapter that allows calculator to access and SD card and GPIOs on an STM32. Allows I2c and thermal printer printouts.
 
+![IMG_20250401_211537476](https://github.com/user-attachments/assets/a8959951-17f1-4ca3-8cac-b0b70dedff60)
+
  The sketch accepts commands from the 502p and stores the data
  words on the SD card under a filename specified on the 502p. This
  is a three digit number. When loading back the data words are sent
