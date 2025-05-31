@@ -94,7 +94,7 @@ This sets the filename bank to ABCD. The filename banks are a way to have more t
 
 Real Time Clock Commands
 ------------------------
-This requires an DS3231 I2C real time clock module to hold the time and date. It needs to be attached to the I2C
+This requires a DS3231 I2C real time clock module to hold the time and date. It needs to be attached to the I2C
 
 1.0 E42 : Read date
 
